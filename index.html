@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CS2 Smoke Practice</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            pointer-events: none;
+        }
+
+        #crosshair::before,
+        #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.8);
+        }
+
+        #crosshair::before {
+            width: 2px;
+            height: 20px;
+            left: 9px;
+        }
+
+        #crosshair::after {
+            width: 20px;
+            height: 2px;
+            top: 9px;
+        }
+
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="canvas-container"></div>
+    <div id="crosshair"></div>
+    <div id="info">
+        <div><strong>CS2 Movement:</strong></div>
+        <div>WASD - Run</div>
+        <div>SHIFT - Walk (slower)</div>
+        <div>CTRL - Crouch</div>
+        <div>SPACE - Jump (or jump off ladder)</div>
+        <div>W/S on ladder - Climb up/down</div>
+        <div>4 - Equip/unequip smoke</div>
+        <div>Left Click - Throw smoke (far)</div>
+        <div>Right Click - Throw smoke (close)</div>
+        <div>Mouse - Look</div>
+        <div style="margin-top: 5px; font-size: 12px; opacity: 0.8;">Click to lock pointer</div>
+        <div style="margin-top: 10px; border-top: 1px solid white; padding-top: 10px;">
+            <div>Map Scale: <span id="scale-value">100</span></div>
+            <input type="range" id="scale-slider" min="0.1" max="1000" value="100" step="0.1" style="width: 200px;">
+        </div>
+    </div>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module" src="./main.js"></script>
+</body>
+
+</html>
