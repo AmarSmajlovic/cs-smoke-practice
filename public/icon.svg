@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0e1013"/>
+  <circle cx="200" cy="300" r="90" fill="#c8c8c8" opacity="0.9"/>
+  <circle cx="290" cy="250" r="105" fill="#e0e0e0" opacity="0.9"/>
+  <circle cx="330" cy="330" r="80" fill="#b0b0b0" opacity="0.9"/>
+  <circle cx="240" cy="220" r="70" fill="#f0f0f0" opacity="0.95"/>
+  <text x="256" y="465" font-family="Arial, sans-serif" font-size="64" font-weight="900" fill="#f5b83d" text-anchor="middle">SMOKE</text>
+</svg>
