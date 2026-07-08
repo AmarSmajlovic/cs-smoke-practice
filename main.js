@@ -59,6 +59,27 @@ const controls = new PointerLockControls(camera, renderer.domElement);
 controls.addEventListener('unlock', () => {
     if (gameState === 'playing') pauseGame();
 });
+// Desktop resume completes only when the pointer actually locks — browsers
+// enforce a ~1.5s cooldown after ESC, so a too-quick click can be rejected
+controls.addEventListener('lock', () => {
+    if (gameState === 'paused') {
+        hide('resume');
+        gameState = 'playing';
+    }
+});
+document.addEventListener('pointerlockerror', () => {
+    if (gameState === 'paused') {
+        document.querySelector('#resume h2').textContent = 'SAČEKAJ SEKUNDU PA KLIKNI OPET';
+    }
+});
+
+// JS fallback for the rotate overlay (iOS quirks with the CSS media query)
+function updateOrientationClass() {
+    if (!isMobile) return;
+    document.body.classList.toggle('landscape', window.innerWidth > window.innerHeight);
+}
+updateOrientationClass();
+window.addEventListener('orientationchange', () => setTimeout(updateOrientationClass, 120));
 
 // Mobile look: drag on the right side of the screen
 const mobileLook = { euler: new THREE.Euler(0, 0, 0, 'YXZ'), active: false, id: -1, lastX: 0, lastY: 0 };
@@ -264,9 +285,13 @@ function showResume(title) {
 }
 
 function resumeGame() {
-    hide('resume');
-    gameState = 'playing';
-    if (!isMobile) controls.lock();
+    if (isMobile) {
+        hide('resume');
+        gameState = 'playing';
+        return;
+    }
+    // stays paused until the 'lock' event actually fires (see listener above)
+    controls.lock();
 }
 
 function backToMenu() {
@@ -555,5 +580,6 @@ window.__debug = { player, mapLoader, grenades, CS2, tuning, camera, THREE, star
 
 window.addEventListener('resize', () => {
     applyFov();
+    updateOrientationClass();
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
