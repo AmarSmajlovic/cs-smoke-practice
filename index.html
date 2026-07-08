@@ -123,8 +123,11 @@
         .btn.primary { background: var(--accent); color: #191100; }
         .btn.ghost { background: var(--panel); color: var(--text); border: 1px solid #2c323b; }
         #resume h2 { font-size: 26px; letter-spacing: 1px; }
-        .keys-hint { margin-top: 26px; color: var(--muted); font-size: 12.5px; line-height: 1.9; text-align: center; }
+        .keys-hint { margin-top: 26px; color: var(--muted); font-size: 12.5px; line-height: 1.9; text-align: center; padding: 0 16px; }
         .keys-hint b { color: var(--text); }
+        .keys-hint.mobile-hint { display: none; }
+        body.mobile .keys-hint.desktop-hint { display: none; }
+        body.mobile .keys-hint.mobile-hint { display: block; }
 
         /* ---------- HUD ---------- */
         #crosshair {
@@ -181,6 +184,7 @@
         @media (orientation: landscape) {
             body.mobile #rotate-overlay { display: flex; }
         }
+        body.mobile.landscape #rotate-overlay { display: flex; }
         .mbtn {
             position: absolute; pointer-events: auto; border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
@@ -246,10 +250,16 @@
             <button class="btn primary" id="btn-resume">NASTAVI</button>
             <button class="btn ghost" id="btn-menu">GLAVNI MENI</button>
         </div>
-        <div class="keys-hint">
+        <div class="keys-hint desktop-hint">
             <b>WASD</b> kretanje &nbsp; <b>SHIFT</b> hod &nbsp; <b>CTRL</b> čučanj &nbsp; <b>SPACE</b> skok<br>
             <b>LMB</b> pun bacaj &nbsp; <b>RMB</b> kratki &nbsp; <b>LMB+RMB</b> srednji &nbsp; drži <b>SPACE</b> pa pusti klik = <b>jumpthrow</b><br>
             <b>C</b> obriši smoke-ove &nbsp; <b>R</b> respawn
+        </div>
+        <div class="keys-hint mobile-hint">
+            <b>▲▼◀▶</b> kretanje (klizi prstom za dijagonale)<br>
+            povuci prstom po <b>desnoj strani</b> = gledanje<br>
+            <b>THROW</b> pun bacaj &nbsp; <b>JT</b> = automatski jumpthrow &nbsp; <b>JUMP</b> skok<br>
+            <b>C</b> obriši smoke-ove &nbsp; <b>☰</b> pauza
         </div>
     </div>
 
