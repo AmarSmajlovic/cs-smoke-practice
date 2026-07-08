@@ -16,6 +16,7 @@ export class GrenadeSystem {
         this.mapLoader = mapLoader;
         this.projectiles = [];
         this.smokes = [];
+        this.trails = [];
         this.maxSmokes = 3;
         this.grenadeModelGLB = null;
         this.loadGrenadeModel();
@@ -66,19 +67,26 @@ export class GrenadeSystem {
         this.computeThrow(eyePos, viewForwardHorizontal, sourcePitchDeg, strength, playerVelocity, mesh.position, velocity);
         this.scene.add(mesh);
 
-        this.projectiles.push({
+        const nade = {
             mesh,
             position: mesh.position,
             velocity,
             rolling: false,
             age: 0,
-        });
+            trail: null,
+            trailCount: 0,
+            trailTick: 0,
+        };
+        this.projectiles.push(nade);
+        this.startTrail(nade);
     }
 
     tick(dt) {
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
             const nade = this.projectiles[i];
-            if (!this.stepProjectile(nade, dt)) {
+            const alive = this.stepProjectile(nade, dt);
+            if (!alive || (nade.trailTick++ % 2 === 0)) this.recordTrailPoint(nade);
+            if (!alive) {
                 this.detonate(nade);
                 this.scene.remove(nade.mesh);
                 this.projectiles.splice(i, 1);
@@ -170,54 +178,45 @@ export class GrenadeSystem {
         return true;
     }
 
-    // ---- CS2-style grenade trajectory preview (shown while holding a throw)
-    ensurePreview() {
-        if (this.previewLine) return;
+    // ---- CS2-style grenade trail: a line is drawn along the path the nade
+    // actually flew and stays visible so you can study the lineup
+    startTrail(nade) {
         const geo = new THREE.BufferGeometry();
-        geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(PREVIEW_MAX * 3), 3));
-        this.previewLine = new THREE.Line(geo, new THREE.LineBasicMaterial({
-            color: 0xf5b83d, transparent: true, opacity: 0.9, depthTest: false,
+        geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL_MAX * 3), 3));
+        geo.setDrawRange(0, 0);
+        const line = new THREE.Line(geo, new THREE.LineBasicMaterial({
+            color: 0xf5b83d, transparent: true, opacity: 0.85,
         }));
-        this.previewLine.renderOrder = 5;
-        this.previewLine.frustumCulled = false;
-        this.scene.add(this.previewLine);
-
-        this.previewMarker = new THREE.Mesh(
-            new THREE.SphereGeometry(7, 14, 14),
-            new THREE.MeshBasicMaterial({ color: 0xf5b83d, transparent: true, opacity: 0.55, depthTest: false })
-        );
-        this.previewMarker.renderOrder = 5;
-        this.scene.add(this.previewMarker);
-        this.hidePreview();
-    }
-
-    updatePreview(eyePos, viewForwardHorizontal, sourcePitchDeg, strength, playerVelocity) {
-        this.ensurePreview();
-        this.computeThrow(eyePos, viewForwardHorizontal, sourcePitchDeg, strength, playerVelocity, _simState.position, _simState.velocity);
-        _simState.rolling = false;
-        _simState.age = 0;
-        _simState.passed.clear();
-
-        const attr = this.previewLine.geometry.attributes.position;
-        let n = 0;
-        attr.setXYZ(n++, _simState.position.x, _simState.position.y, _simState.position.z);
-        let alive = true;
-        for (let i = 0; i < 64 * 12 && alive && n < PREVIEW_MAX; i++) {
-            alive = this.stepProjectile(_simState, CS2.TICK, false);
-            if (i % 2 === 0 || !alive) {
-                attr.setXYZ(n++, _simState.position.x, _simState.position.y, _simState.position.z);
-            }
+        line.frustumCulled = false;
+        this.scene.add(line);
+        nade.trail = line;
+        nade.trailCount = 0;
+        this.trails.push(line);
+        while (this.trails.length > MAX_TRAILS) {
+            const old = this.trails.shift();
+            this.scene.remove(old);
+            old.geometry.dispose();
+            old.material.dispose();
         }
-        attr.needsUpdate = true;
-        this.previewLine.geometry.setDrawRange(0, n);
-        this.previewLine.visible = true;
-        this.previewMarker.position.copy(_simState.position);
-        this.previewMarker.visible = true;
+        this.recordTrailPoint(nade);
     }
 
-    hidePreview() {
-        if (this.previewLine) this.previewLine.visible = false;
-        if (this.previewMarker) this.previewMarker.visible = false;
+    recordTrailPoint(nade) {
+        if (!nade.trail || nade.trailCount >= TRAIL_MAX) return;
+        const attr = nade.trail.geometry.attributes.position;
+        attr.setXYZ(nade.trailCount++, nade.position.x, nade.position.y, nade.position.z);
+        attr.needsUpdate = true;
+        nade.trail.geometry.setDrawRange(0, nade.trailCount);
+    }
+
+    clearTrails() {
+        for (const t of this.trails) {
+            this.scene.remove(t);
+            t.geometry.dispose();
+            t.material.dispose();
+        }
+        this.trails = [];
+        for (const nade of this.projectiles) nade.trail = null;
     }
 
     detonate(nade) {
@@ -335,6 +334,7 @@ export class GrenadeSystem {
 
     clearAllSmokes() {
         while (this.smokes.length) this.removeSmoke(this.smokes[0]);
+        this.clearTrails();
     }
 
     get activeSmokeCount() {
@@ -343,14 +343,8 @@ export class GrenadeSystem {
 }
 
 const _down = new THREE.Vector3(0, -1, 0);
-const PREVIEW_MAX = 512;
-const _simState = {
-    position: new THREE.Vector3(),
-    velocity: new THREE.Vector3(),
-    rolling: false,
-    age: 0,
-    passed: new Set(),
-};
+const TRAIL_MAX = 640;
+const MAX_TRAILS = 4;
 
 // Soft radial sprite so smoke particles blend into a cloud instead of squares
 let _smokeSprite = null;
