@@ -391,6 +391,7 @@ document.addEventListener('keydown', (e) => {
     }
     if (k === 'c') grenades.clearAllSmokes();
     if (k === 'r') player.spawn(spawnPoint.x, spawnPoint.y, spawnPoint.z);
+    if (k === 'v') player.noclip = !player.noclip;
 });
 
 document.addEventListener('keyup', (e) => {
@@ -403,6 +404,7 @@ document.addEventListener('keyup', (e) => {
 
 // Throw: LMB = full, RMB = underhand, LMB+RMB = medium. Release to throw.
 let leftHeld = false, rightHeld = false, bothWereHeld = false;
+let mobileThrowHeld = false;
 
 document.addEventListener('mousedown', (e) => {
     if (gameState !== 'playing' || isMobile || !controls.isLocked || !hasSmoke) return;
@@ -465,9 +467,12 @@ function setupMobileButtons() {
         }
     };
     press('btn-jump', () => { keys.space = true; }, () => { keys.space = false; });
-    press('btn-throw', () => {}, () => { if (gameState === 'playing') throwSmoke(1.0); });
+    press('btn-throw',
+        () => { mobileThrowHeld = true; },
+        () => { mobileThrowHeld = false; if (gameState === 'playing') throwSmoke(1.0); });
     press('btn-clear', () => grenades.clearAllSmokes());
     press('btn-pause', () => { if (gameState === 'playing') pauseGame(); });
+    press('btn-fly', () => { player.noclip = !player.noclip; $('btn-fly').classList.toggle('act', player.noclip); });
     // scripted jumpthrow: jump, release the nade on the way up
     press('btn-jt', () => {
         if (gameState !== 'playing') return;
@@ -508,6 +513,7 @@ const debugFolder = gui.addFolder('Debug');
 debugFolder.add({ collider: false }, 'collider').name('Show Collider').onChange((v) => {
     if (mapLoader.colliderVisualizer) mapLoader.colliderVisualizer.visible = v;
 });
+debugFolder.add(player, 'noclip').name('Noclip (V)').listen();
 debugFolder.close();
 gui.close();
 if (isMobile) gui.hide();
@@ -556,6 +562,23 @@ function animate() {
         }
         player.getEyePosition(camera.position);
         updateViewmodel(delta);
+
+        // grenade trajectory preview while a throw is held (CS2-style)
+        const holdingThrow = hasSmoke && (leftHeld || rightHeld || mobileThrowHeld);
+        if (holdingThrow && frameCount % 2 === 0) {
+            const strength = bothWereHeld ? 0.5 : (rightHeld && !leftHeld ? 0.0 : 1.0);
+            _euler.setFromQuaternion(camera.quaternion);
+            camera.getWorldDirection(_fwdH);
+            _fwdH.y = 0;
+            _fwdH.normalize();
+            grenades.updatePreview(
+                player.getEyePosition(_eye), _fwdH,
+                -THREE.MathUtils.radToDeg(_euler.x), strength, player.velocity);
+        } else if (!holdingThrow) {
+            grenades.hidePreview();
+        }
+    } else {
+        grenades.hidePreview();
     }
 
     grenades.update(delta);
@@ -564,7 +587,7 @@ function animate() {
         const hSpeed = Math.hypot(player.velocity.x, player.velocity.z);
         posDisplay.textContent =
             `pos ${player.position.x.toFixed(0)} ${player.position.y.toFixed(0)} ${player.position.z.toFixed(0)}  ` +
-            `vel ${hSpeed.toFixed(0)}${player.onLadder ? ' [ladder]' : ''}`;
+            `vel ${hSpeed.toFixed(0)}${player.onLadder ? ' [ladder]' : ''}${player.noclip ? ' [noclip]' : ''}`;
     }
 
     renderer.render(scene, camera);

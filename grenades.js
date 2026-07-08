@@ -43,10 +43,10 @@ export class GrenadeSystem {
         );
     }
 
-    // CS2 throw: pitch biased up to 10° above the crosshair, speed scaled by
-    // throw strength (1 = left click, 0.5 = both, 0 = right click / underhand),
-    // plus 1.25x of the player's current velocity (this IS the jumpthrow).
-    throwGrenade(eyePos, viewForwardHorizontal, sourcePitchDeg, strength, playerVelocity) {
+    // CS2 throw math: pitch biased up to 10° above the crosshair, speed scaled
+    // by throw strength (1 = left click, 0.5 = both, 0 = right click), plus
+    // 1.25x of the player's current velocity (this IS the jumpthrow).
+    computeThrow(eyePos, viewForwardHorizontal, sourcePitchDeg, strength, playerVelocity, outPos, outVel) {
         let pitch = THREE.MathUtils.clamp(sourcePitchDeg, -90, 90);
         pitch -= CS2.nadePitchBias * (90 - Math.abs(pitch)) / 90;
         const p = THREE.MathUtils.degToRad(pitch);
@@ -56,20 +56,23 @@ export class GrenadeSystem {
         _dir.normalize();
 
         const speed = tuning.throwSpeed * (0.3 + 0.7 * strength);
-        const velocity = _dir.clone().multiplyScalar(speed)
-            .addScaledVector(playerVelocity, tuning.velInherit);
+        outVel.copy(_dir).multiplyScalar(speed).addScaledVector(playerVelocity, tuning.velInherit);
+        outPos.copy(eyePos).addScaledVector(_dir, CS2.nadeSpawnForward);
+    }
 
+    throwGrenade(eyePos, viewForwardHorizontal, sourcePitchDeg, strength, playerVelocity) {
         const mesh = this.makeGrenadeMesh();
-        mesh.position.copy(eyePos).addScaledVector(_dir, CS2.nadeSpawnForward);
+        const velocity = new THREE.Vector3();
+        this.computeThrow(eyePos, viewForwardHorizontal, sourcePitchDeg, strength, playerVelocity, mesh.position, velocity);
         this.scene.add(mesh);
 
         this.projectiles.push({
             mesh,
+            position: mesh.position,
             velocity,
             rolling: false,
             age: 0,
         });
-        console.log(`Nade thrown: strength ${strength}, speed ${speed.toFixed(0)} u/s`);
     }
 
     tick(dt) {
@@ -83,9 +86,12 @@ export class GrenadeSystem {
         }
     }
 
-    // Returns false when the grenade comes to rest (=> detonate)
-    stepProjectile(nade, dt) {
-        const pos = nade.mesh.position;
+    // One physics step for a grenade state {position, velocity, rolling, age}.
+    // Returns false when the grenade comes to rest (=> detonate).
+    // interactive=false is used for the trajectory preview: identical path,
+    // but glass isn't actually broken.
+    stepProjectile(nade, dt, interactive = true) {
+        const pos = nade.position;
         const vel = nade.velocity;
         nade.age += dt;
         if (nade.age > 20) return false; // safety net
@@ -99,13 +105,16 @@ export class GrenadeSystem {
         if (dist > 1e-6) {
             // breakable glass: smash through, keep flying (slight speed loss)
             for (const b of this.mapLoader.breakables) {
-                if (b.broken) continue;
+                if (b.broken || (nade.passed && nade.passed.has(b))) continue;
                 _segBox.setFromPoints([pos, _end.copy(pos).add(_move)]).expandByScalar(CS2.nadeRadius);
                 if (b.box.intersectsBox(_segBox)) {
-                    b.broken = true;
-                    b.mesh.visible = false;
+                    if (interactive) {
+                        b.broken = true;
+                        b.mesh.visible = false;
+                    } else if (nade.passed) {
+                        nade.passed.add(b);
+                    }
                     vel.multiplyScalar(0.9);
-                    console.log('Glass broken!');
                 }
             }
             _dir.copy(_move).divideScalar(dist);
@@ -154,15 +163,65 @@ export class GrenadeSystem {
             const s = newSpeed / speed;
             vel.x *= s;
             vel.z *= s;
-        } else {
+        } else if (nade.mesh) {
             nade.mesh.rotateX(-0.15); // tumble in flight
         }
 
         return true;
     }
 
+    // ---- CS2-style grenade trajectory preview (shown while holding a throw)
+    ensurePreview() {
+        if (this.previewLine) return;
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(PREVIEW_MAX * 3), 3));
+        this.previewLine = new THREE.Line(geo, new THREE.LineBasicMaterial({
+            color: 0xf5b83d, transparent: true, opacity: 0.9, depthTest: false,
+        }));
+        this.previewLine.renderOrder = 5;
+        this.previewLine.frustumCulled = false;
+        this.scene.add(this.previewLine);
+
+        this.previewMarker = new THREE.Mesh(
+            new THREE.SphereGeometry(7, 14, 14),
+            new THREE.MeshBasicMaterial({ color: 0xf5b83d, transparent: true, opacity: 0.55, depthTest: false })
+        );
+        this.previewMarker.renderOrder = 5;
+        this.scene.add(this.previewMarker);
+        this.hidePreview();
+    }
+
+    updatePreview(eyePos, viewForwardHorizontal, sourcePitchDeg, strength, playerVelocity) {
+        this.ensurePreview();
+        this.computeThrow(eyePos, viewForwardHorizontal, sourcePitchDeg, strength, playerVelocity, _simState.position, _simState.velocity);
+        _simState.rolling = false;
+        _simState.age = 0;
+        _simState.passed.clear();
+
+        const attr = this.previewLine.geometry.attributes.position;
+        let n = 0;
+        attr.setXYZ(n++, _simState.position.x, _simState.position.y, _simState.position.z);
+        let alive = true;
+        for (let i = 0; i < 64 * 12 && alive && n < PREVIEW_MAX; i++) {
+            alive = this.stepProjectile(_simState, CS2.TICK, false);
+            if (i % 2 === 0 || !alive) {
+                attr.setXYZ(n++, _simState.position.x, _simState.position.y, _simState.position.z);
+            }
+        }
+        attr.needsUpdate = true;
+        this.previewLine.geometry.setDrawRange(0, n);
+        this.previewLine.visible = true;
+        this.previewMarker.position.copy(_simState.position);
+        this.previewMarker.visible = true;
+    }
+
+    hidePreview() {
+        if (this.previewLine) this.previewLine.visible = false;
+        if (this.previewMarker) this.previewMarker.visible = false;
+    }
+
     detonate(nade) {
-        const p = nade.mesh.position;
+        const p = nade.position;
         console.log(`Smoke detonated at ${p.x.toFixed(0)} ${p.y.toFixed(0)} ${p.z.toFixed(0)}`);
         this.createSmoke(p.clone());
     }
@@ -284,6 +343,14 @@ export class GrenadeSystem {
 }
 
 const _down = new THREE.Vector3(0, -1, 0);
+const PREVIEW_MAX = 512;
+const _simState = {
+    position: new THREE.Vector3(),
+    velocity: new THREE.Vector3(),
+    rolling: false,
+    age: 0,
+    passed: new Set(),
+};
 
 // Soft radial sprite so smoke particles blend into a cloud instead of squares
 let _smokeSprite = null;

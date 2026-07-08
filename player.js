@@ -20,6 +20,7 @@ export class Player {
         this.onGround = false;
         this.ducking = false;
         this.onLadder = false;
+        this.noclip = false;
         this.lastClimb = 0;
         this.eyeCurrent = CS2.eyeStand;        // smoothed (CS2 duck transition)
         this.lastPush = new THREE.Vector3(); // debug: last collision pushout
@@ -54,6 +55,20 @@ export class Player {
         // Smooth duck transition (~0.3s, like CS2 — instant snap feels wrong)
         const eyeTarget = this.ducking ? CS2.eyeCrouch : CS2.eyeStand;
         this.eyeCurrent += (eyeTarget - this.eyeCurrent) * Math.min(1, dt * 14);
+
+        // Noclip: fly freely through everything (CS2 practice-style)
+        if (this.noclip) {
+            const speed = input.walk ? 220 : 760;
+            this.velocity.set(0, 0, 0)
+                .addScaledVector(viewFull || viewForward, input.forwardMove * speed)
+                .addScaledVector(viewRight, input.sideMove * speed);
+            if (input.jump) this.velocity.y += speed * 0.8;
+            if (input.duck) this.velocity.y -= speed * 0.8;
+            this.position.addScaledVector(this.velocity, dt);
+            this.onGround = false;
+            this.onLadder = false;
+            return;
+        }
 
         // Ladder volume check (feet-center and chest points). Standing on the
         // ground at the base only grabs the ladder when pushing W and looking

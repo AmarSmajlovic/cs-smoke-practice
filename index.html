@@ -213,6 +213,8 @@
         #btn-jump { right: 118px; bottom: 26px; width: 64px; height: 64px; font-size: 12px; }
         #btn-jt { right: 26px; bottom: 200px; width: 60px; height: 60px; font-size: 12px; }
         #btn-clear { right: 12px; top: 12px; width: 44px; height: 44px; font-size: 11px; border-radius: 10px; }
+        #btn-fly { right: 66px; top: 12px; width: 44px; height: 44px; font-size: 10px; border-radius: 10px; }
+        .mbtn.act { background: rgba(245,184,61,.5); border-color: var(--accent); }
     </style>
 </head>
 
@@ -222,7 +224,7 @@
     <!-- HUD -->
     <div id="crosshair" class="hidden"></div>
     <div id="pos-display" class="hidden"></div>
-    <div id="hud-hint" class="hidden">4 smoke &nbsp;•&nbsp; LMB full / RMB lob &nbsp;•&nbsp; SPACE+release = jumpthrow &nbsp;•&nbsp; C clear &nbsp;•&nbsp; R respawn</div>
+    <div id="hud-hint" class="hidden">hold LMB = trajectory &nbsp;•&nbsp; RMB lob &nbsp;•&nbsp; SPACE+release = jumpthrow &nbsp;•&nbsp; V noclip &nbsp;•&nbsp; C clear &nbsp;•&nbsp; R respawn</div>
 
     <!-- MAIN MENU -->
     <div id="menu" class="overlay">
@@ -272,14 +274,14 @@
         </div>
         <div class="keys-hint desktop-hint">
             <b>WASD</b> move &nbsp; <b>SHIFT</b> walk &nbsp; <b>CTRL</b> crouch &nbsp; <b>SPACE</b> jump<br>
-            <b>LMB</b> full throw &nbsp; <b>RMB</b> lob &nbsp; <b>LMB+RMB</b> medium &nbsp; hold <b>SPACE</b>, release click = <b>jumpthrow</b><br>
-            <b>C</b> clear smokes &nbsp; <b>R</b> respawn
+            hold <b>LMB</b> = throw + trajectory preview &nbsp; <b>RMB</b> lob &nbsp; <b>LMB+RMB</b> medium &nbsp; <b>SPACE</b>+release = <b>jumpthrow</b><br>
+            <b>V</b> noclip (fly) &nbsp; <b>C</b> clear smokes &nbsp; <b>R</b> respawn
         </div>
         <div class="keys-hint mobile-hint">
             <b>▲▼◀▶</b> move (slide finger for diagonals)<br>
             drag the <b>right side</b> of the screen to look around<br>
-            <b>THROW</b> full throw &nbsp; <b>JT</b> = auto jumpthrow &nbsp; <b>JUMP</b> jump<br>
-            <b>C</b> clear smokes &nbsp; <b>☰</b> pause
+            hold <b>THROW</b> = trajectory preview, release = throw &nbsp; <b>JT</b> = auto jumpthrow<br>
+            <b>FLY</b> noclip &nbsp; <b>C</b> clear smokes &nbsp; <b>☰</b> pause
         </div>
     </div>
 
@@ -295,6 +297,7 @@
         <div class="mbtn" id="btn-jump">JUMP</div>
         <div class="mbtn" id="btn-jt">JT</div>
         <div class="mbtn" id="btn-clear">C</div>
+        <div class="mbtn" id="btn-fly">FLY</div>
         <div class="mbtn" id="btn-pause">☰</div>
     </div>
 
