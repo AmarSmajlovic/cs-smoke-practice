@@ -256,7 +256,10 @@ async function startGame(mapKey) {
     hide('loading');
     show('crosshair');
     show('pos-display');
-    if (!isMobile) show('hud-hint');
+    if (!isMobile) {
+        show('hud-hint');
+        show('throw-help');
+    }
 
     if (isMobile) {
         gameState = 'playing';
@@ -298,6 +301,7 @@ function backToMenu() {
     hide('crosshair');
     hide('pos-display');
     hide('hud-hint');
+    hide('throw-help');
     grenades.clearAllSmokes();
     mapLoader.unload();
     map = null;
@@ -413,16 +417,25 @@ document.addEventListener('keyup', (e) => {
 let leftHeld = false, rightHeld = false;
 let gestureL = false, gestureR = false;
 
+// Light up the matching row in the throw-help widget while buttons are held
+function updateThrowHelp() {
+    $('th-full').classList.toggle('act', leftHeld && !rightHeld);
+    $('th-lob').classList.toggle('act', rightHeld && !leftHeld);
+    $('th-med').classList.toggle('act', leftHeld && rightHeld);
+}
+
 document.addEventListener('mousedown', (e) => {
     if (gameState !== 'playing' || isMobile || !controls.isLocked) return;
     if (e.button === 0) { leftHeld = true; gestureL = true; }
     if (e.button === 2) { rightHeld = true; gestureR = true; }
+    updateThrowHelp();
 });
 
 document.addEventListener('mouseup', (e) => {
     if (e.button !== 0 && e.button !== 2) return;
     if (e.button === 0) leftHeld = false;
     if (e.button === 2) rightHeld = false;
+    updateThrowHelp();
     if (leftHeld || rightHeld) return; // wait until every button is released
 
     const strength = gestureL && gestureR ? 0.5 : gestureL ? 1.0 : gestureR ? 0.0 : null;
@@ -474,6 +487,8 @@ function setupMobileButtons() {
     };
     press('btn-jump', () => { keys.space = true; }, () => { keys.space = false; });
     press('btn-throw', () => {}, () => { if (gameState === 'playing') throwSmoke(1.0); });
+    press('btn-med', () => {}, () => { if (gameState === 'playing') throwSmoke(0.5); });
+    press('btn-lob', () => {}, () => { if (gameState === 'playing') throwSmoke(0.0); });
     press('btn-clear', () => grenades.clearAllSmokes());
     press('btn-pause', () => { if (gameState === 'playing') pauseGame(); });
     press('btn-fly', () => { player.noclip = !player.noclip; $('btn-fly').classList.toggle('act', player.noclip); });
