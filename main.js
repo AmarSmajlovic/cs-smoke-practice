@@ -404,7 +404,6 @@ document.addEventListener('keyup', (e) => {
 
 // Throw: LMB = full, RMB = underhand, LMB+RMB = medium. Release to throw.
 let leftHeld = false, rightHeld = false, bothWereHeld = false;
-let mobileThrowHeld = false;
 
 document.addEventListener('mousedown', (e) => {
     if (gameState !== 'playing' || isMobile || !controls.isLocked || !hasSmoke) return;
@@ -467,9 +466,7 @@ function setupMobileButtons() {
         }
     };
     press('btn-jump', () => { keys.space = true; }, () => { keys.space = false; });
-    press('btn-throw',
-        () => { mobileThrowHeld = true; },
-        () => { mobileThrowHeld = false; if (gameState === 'playing') throwSmoke(1.0); });
+    press('btn-throw', () => {}, () => { if (gameState === 'playing') throwSmoke(1.0); });
     press('btn-clear', () => grenades.clearAllSmokes());
     press('btn-pause', () => { if (gameState === 'playing') pauseGame(); });
     press('btn-fly', () => { player.noclip = !player.noclip; $('btn-fly').classList.toggle('act', player.noclip); });
@@ -562,23 +559,6 @@ function animate() {
         }
         player.getEyePosition(camera.position);
         updateViewmodel(delta);
-
-        // grenade trajectory preview while a throw is held (CS2-style)
-        const holdingThrow = hasSmoke && (leftHeld || rightHeld || mobileThrowHeld);
-        if (holdingThrow && frameCount % 2 === 0) {
-            const strength = bothWereHeld ? 0.5 : (rightHeld && !leftHeld ? 0.0 : 1.0);
-            _euler.setFromQuaternion(camera.quaternion);
-            camera.getWorldDirection(_fwdH);
-            _fwdH.y = 0;
-            _fwdH.normalize();
-            grenades.updatePreview(
-                player.getEyePosition(_eye), _fwdH,
-                -THREE.MathUtils.radToDeg(_euler.x), strength, player.velocity);
-        } else if (!holdingThrow) {
-            grenades.hidePreview();
-        }
-    } else {
-        grenades.hidePreview();
     }
 
     grenades.update(delta);
