@@ -322,7 +322,9 @@ $('btn-menu').addEventListener('click', backToMenu);
 // ---------------------------------------------------------------- Viewmodel
 let grenadeInHand = null;
 let hasSmoke = true;
-const vmBase = new THREE.Vector3(6.5, -5.5, -13);
+// held low in the bottom-right corner, tilted like a hand grip
+const vmBase = new THREE.Vector3(7.8, -7.1, -12);
+const vmRot = new THREE.Euler(0.55, -0.7, -0.18);
 let bobPhase = 0;
 const sway = { x: 0, y: 0 };
 let lastCamYaw = 0, lastCamPitch = 0;
@@ -331,7 +333,7 @@ let lastCamYaw = 0, lastCamPitch = 0;
     try {
         const gltf = await new GLTFLoader().loadAsync('/models/smoke_grenade.glb');
         grenadeInHand = gltf.scene;
-        grenadeInHand.scale.setScalar(0.035);
+        grenadeInHand.scale.setScalar(0.046);
     } catch (e) {
         grenadeInHand = new THREE.Mesh(
             new THREE.SphereGeometry(1.2, 10, 10),
@@ -340,7 +342,7 @@ let lastCamYaw = 0, lastCamPitch = 0;
     }
     camera.add(grenadeInHand);
     grenadeInHand.position.copy(vmBase);
-    grenadeInHand.rotation.set(0.3, -0.3, 0.1);
+    grenadeInHand.rotation.copy(vmRot);
     grenadeInHand.visible = hasSmoke;
 })();
 
@@ -370,7 +372,7 @@ function updateViewmodel(delta) {
         vmBase.y + bobY + sway.y,
         vmBase.z
     );
-    grenadeInHand.rotation.set(0.3 + sway.y * 0.06, -0.3 + sway.x * 0.08, 0.1 + bobX * 0.04);
+    grenadeInHand.rotation.set(vmRot.x + sway.y * 0.06, vmRot.y + sway.x * 0.08, vmRot.z + bobX * 0.04);
 }
 const _vmEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 
