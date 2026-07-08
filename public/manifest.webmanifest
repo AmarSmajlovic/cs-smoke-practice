@@ -1,0 +1,18 @@
+{
+    "name": "SMOKEPRACTICE — CS2 Smoke Lineup Trainer",
+    "short_name": "SMOKEPRACTICE",
+    "description": "Practice CS2 smoke lineups in your browser. Real maps, exact physics.",
+    "start_url": "/",
+    "display": "fullscreen",
+    "orientation": "portrait",
+    "background_color": "#0e1013",
+    "theme_color": "#0e1013",
+    "icons": [
+        {
+            "src": "/icon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any"
+        }
+    ]
+}

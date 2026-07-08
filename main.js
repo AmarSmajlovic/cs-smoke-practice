@@ -460,6 +460,15 @@ if (isMobile) {
     setupMobileLook();
     setupDpad();
     setupMobileButtons();
+    // Lock to portrait at the FIRST tap anywhere (browsers require a user
+    // gesture before fullscreen/orientation APIs are allowed)
+    const firstTouch = () => {
+        lockPortrait();
+        document.removeEventListener('touchend', firstTouch);
+        document.removeEventListener('click', firstTouch);
+    };
+    document.addEventListener('touchend', firstTouch, { once: false });
+    document.addEventListener('click', firstTouch, { once: false });
 } else {
     renderer.domElement.addEventListener('click', () => {
         if (gameState === 'playing' && !controls.isLocked) controls.lock();
