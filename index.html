@@ -79,7 +79,10 @@
             letter-spacing: .5px;
         }
         .map-card.playable:hover { transform: translateY(-3px); border-color: var(--accent); }
-        .map-card.playable .art { background: linear-gradient(160deg, #c9a35c 0%, #8a6b3a 55%, #4c3b22 100%); }
+        .map-card.playable .art {
+            background: url('/thumbs/mirage.jpg') center/cover,
+                        linear-gradient(160deg, #c9a35c 0%, #8a6b3a 55%, #4c3b22 100%);
+        }
         .map-card.playable .art::after {
             content: '▶  PLAY'; position: absolute; inset: 0;
             display: flex; align-items: center; justify-content: center;
@@ -108,10 +111,23 @@
 
         /* ---------- loading ---------- */
         #loading .logo { margin-top: 0; }
-        .load-map-name { color: var(--muted); letter-spacing: 3px; margin: 4px 0 26px; font-size: 14px; }
-        .bar-wrap { width: min(420px, 80vw); height: 10px; border-radius: 6px; background: var(--panel2); overflow: hidden; }
-        #bar { height: 100%; width: 0%; border-radius: 6px; background: linear-gradient(90deg, var(--accent2), var(--accent)); transition: width .15s; }
-        #load-status { margin-top: 12px; color: var(--muted); font-size: 13px; }
+        .load-map-name { color: var(--muted); letter-spacing: 3px; margin: 4px 0 22px; font-size: 14px; }
+        .load-art {
+            position: relative; width: min(440px, 84vw); aspect-ratio: 16/10;
+            border-radius: 14px; overflow: hidden; border: 1px solid #262b33;
+        }
+        .load-art img {
+            position: absolute; inset: 0; width: 100%; height: 100%;
+            object-fit: cover; display: block;
+        }
+        .load-art .dim { filter: grayscale(1) brightness(.28); }
+        .load-art .fill { clip-path: inset(0 100% 0 0); transition: clip-path .2s linear; }
+        .load-art .pct {
+            position: absolute; right: 10px; bottom: 8px;
+            font-weight: 900; font-size: 26px; color: #fff;
+            text-shadow: 0 1px 6px rgba(0,0,0,.8);
+        }
+        #load-status { margin-top: 14px; color: var(--muted); font-size: 13px; }
 
         /* ---------- resume ---------- */
         #resume { background: rgba(10, 12, 15, .82); }
@@ -211,7 +227,7 @@
     <!-- MAIN MENU -->
     <div id="menu" class="overlay">
         <div class="logo">SMOKE<span class="a">PRACTICE</span></div>
-        <div class="tagline">CS2 SMOKE LINEUP TRAINER — U BROWSERU, BEZ IGRE</div>
+        <div class="tagline">CS2 SMOKE LINEUP TRAINER — IN YOUR BROWSER, NO GAME NEEDED</div>
 
         <div class="maps">
             <div class="map-card playable" data-map="mirage">
@@ -239,27 +255,31 @@
     <div id="loading" class="overlay hidden">
         <div class="logo">SMOKE<span class="a">PRACTICE</span></div>
         <div class="load-map-name" id="load-map-name">DE_MIRAGE</div>
-        <div class="bar-wrap"><div id="bar"></div></div>
-        <div id="load-status">Preuzimanje mape…</div>
+        <div class="load-art">
+            <img class="dim" src="/thumbs/mirage.jpg" alt="">
+            <img class="fill" id="load-fill" src="/thumbs/mirage.jpg" alt="">
+            <div class="pct" id="load-pct">0%</div>
+        </div>
+        <div id="load-status">Downloading map…</div>
     </div>
 
     <!-- RESUME / PAUSE -->
     <div id="resume" class="overlay hidden">
-        <h2>PAUZA</h2>
+        <h2>PAUSED</h2>
         <div class="btns">
-            <button class="btn primary" id="btn-resume">NASTAVI</button>
-            <button class="btn ghost" id="btn-menu">GLAVNI MENI</button>
+            <button class="btn primary" id="btn-resume">RESUME</button>
+            <button class="btn ghost" id="btn-menu">MAIN MENU</button>
         </div>
         <div class="keys-hint desktop-hint">
-            <b>WASD</b> kretanje &nbsp; <b>SHIFT</b> hod &nbsp; <b>CTRL</b> čučanj &nbsp; <b>SPACE</b> skok<br>
-            <b>LMB</b> pun bacaj &nbsp; <b>RMB</b> kratki &nbsp; <b>LMB+RMB</b> srednji &nbsp; drži <b>SPACE</b> pa pusti klik = <b>jumpthrow</b><br>
-            <b>C</b> obriši smoke-ove &nbsp; <b>R</b> respawn
+            <b>WASD</b> move &nbsp; <b>SHIFT</b> walk &nbsp; <b>CTRL</b> crouch &nbsp; <b>SPACE</b> jump<br>
+            <b>LMB</b> full throw &nbsp; <b>RMB</b> lob &nbsp; <b>LMB+RMB</b> medium &nbsp; hold <b>SPACE</b>, release click = <b>jumpthrow</b><br>
+            <b>C</b> clear smokes &nbsp; <b>R</b> respawn
         </div>
         <div class="keys-hint mobile-hint">
-            <b>▲▼◀▶</b> kretanje (klizi prstom za dijagonale)<br>
-            povuci prstom po <b>desnoj strani</b> = gledanje<br>
-            <b>THROW</b> pun bacaj &nbsp; <b>JT</b> = automatski jumpthrow &nbsp; <b>JUMP</b> skok<br>
-            <b>C</b> obriši smoke-ove &nbsp; <b>☰</b> pauza
+            <b>▲▼◀▶</b> move (slide finger for diagonals)<br>
+            drag the <b>right side</b> of the screen to look around<br>
+            <b>THROW</b> full throw &nbsp; <b>JT</b> = auto jumpthrow &nbsp; <b>JUMP</b> jump<br>
+            <b>C</b> clear smokes &nbsp; <b>☰</b> pause
         </div>
     </div>
 
@@ -281,8 +301,8 @@
     <!-- ROTATE TO LANDSCAPE -->
     <div id="rotate-overlay">
         <div class="ph">📱</div>
-        <div style="font-weight:800; letter-spacing:1px;">OKRENI TELEFON VODORAVNO</div>
-        <div style="color:var(--muted); font-size:13px;">SMOKEPRACTICE se igra u landscape modu</div>
+        <div style="font-weight:800; letter-spacing:1px;">ROTATE YOUR PHONE</div>
+        <div style="color:var(--muted); font-size:13px;">SMOKEPRACTICE is played in landscape</div>
     </div>
 
     <script type="module" src="./main.js"></script>
