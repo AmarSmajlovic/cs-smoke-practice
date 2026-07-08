@@ -95,50 +95,54 @@ function setupMobileLook() {
     zone.addEventListener('touchcancel', end);
 }
 
-// Mobile joystick: left side
-const stick = { id: -1, baseX: 0, baseY: 0, fwd: 0, side: 0 };
-function setupJoystick() {
-    const zone = $('stick-zone');
-    const base = $('stick-base');
-    const thumb = $('stick-thumb');
-    const R = 55;
-    zone.addEventListener('touchstart', (e) => {
-        if (stick.id !== -1) return;
-        const t = e.changedTouches[0];
-        stick.id = t.identifier;
-        stick.baseX = t.clientX;
-        stick.baseY = t.clientY;
-        base.style.display = thumb.style.display = 'block';
-        base.style.left = (t.clientX - R) + 'px';
-        base.style.top = (t.clientY - R) + 'px';
-        thumb.style.left = (t.clientX - 24) + 'px';
-        thumb.style.top = (t.clientY - 24) + 'px';
+// Mobile D-pad: hold/slide a finger over the arrows; diagonals work
+const dpadInput = { fwd: 0, side: 0 };
+function setupDpad() {
+    const pad = $('dpad');
+    const arrows = {
+        up: pad.querySelector('[data-d="up"]'),
+        down: pad.querySelector('[data-d="down"]'),
+        left: pad.querySelector('[data-d="left"]'),
+        right: pad.querySelector('[data-d="right"]'),
+    };
+    let touchId = -1;
+
+    const apply = (clientX, clientY) => {
+        const r = pad.getBoundingClientRect();
+        const dx = (clientX - (r.left + r.width / 2)) / (r.width / 2);
+        const dy = (clientY - (r.top + r.height / 2)) / (r.height / 2);
+        dpadInput.side = Math.abs(dx) > 0.28 ? Math.sign(dx) : 0;
+        dpadInput.fwd = Math.abs(dy) > 0.28 ? -Math.sign(dy) : 0;
+        arrows.up.classList.toggle('on', dpadInput.fwd > 0);
+        arrows.down.classList.toggle('on', dpadInput.fwd < 0);
+        arrows.left.classList.toggle('on', dpadInput.side < 0);
+        arrows.right.classList.toggle('on', dpadInput.side > 0);
+    };
+    const clear = () => {
+        touchId = -1;
+        dpadInput.fwd = dpadInput.side = 0;
+        for (const a of Object.values(arrows)) a.classList.remove('on');
+    };
+
+    pad.addEventListener('touchstart', (e) => {
+        if (touchId === -1) {
+            const t = e.changedTouches[0];
+            touchId = t.identifier;
+            apply(t.clientX, t.clientY);
+        }
         e.preventDefault();
     }, { passive: false });
-    zone.addEventListener('touchmove', (e) => {
+    pad.addEventListener('touchmove', (e) => {
         for (const t of e.changedTouches) {
-            if (t.identifier !== stick.id) continue;
-            let dx = t.clientX - stick.baseX;
-            let dy = t.clientY - stick.baseY;
-            const len = Math.hypot(dx, dy);
-            if (len > R) { dx *= R / len; dy *= R / len; }
-            thumb.style.left = (stick.baseX + dx - 24) + 'px';
-            thumb.style.top = (stick.baseY + dy - 24) + 'px';
-            stick.side = dx / R;
-            stick.fwd = -dy / R;
+            if (t.identifier === touchId) apply(t.clientX, t.clientY);
         }
         e.preventDefault();
     }, { passive: false });
     const end = (e) => {
-        for (const t of e.changedTouches) {
-            if (t.identifier !== stick.id) continue;
-            stick.id = -1;
-            stick.fwd = stick.side = 0;
-            $('stick-base').style.display = $('stick-thumb').style.display = 'none';
-        }
+        for (const t of e.changedTouches) if (t.identifier === touchId) clear();
     };
-    zone.addEventListener('touchend', end);
-    zone.addEventListener('touchcancel', end);
+    pad.addEventListener('touchend', end);
+    pad.addEventListener('touchcancel', end);
 }
 
 // ---------------------------------------------------------------- World
@@ -186,7 +190,21 @@ function findSpawn() {
 }
 
 // ---------------------------------------------------------------- Game flow
+// Best effort: keep the game in portrait on mobile (Android supports the
+// lock; on iOS the rotate overlay asks the user instead)
+async function lockPortrait() {
+    try {
+        if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+            await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+        }
+        if (screen.orientation && screen.orientation.lock) {
+            await screen.orientation.lock('portrait');
+        }
+    } catch (e) { /* iOS Safari — CSS rotate overlay covers this */ }
+}
+
 async function startGame(mapKey) {
+    if (isMobile) lockPortrait();
     mapDef = MAPS[mapKey];
     gameState = 'loading';
     hide('menu');
@@ -428,6 +446,7 @@ function setupMobileButtons() {
     press('btn-jump', () => { keys.space = true; }, () => { keys.space = false; });
     press('btn-throw', () => {}, () => { if (gameState === 'playing') throwSmoke(1.0); });
     press('btn-clear', () => grenades.clearAllSmokes());
+    press('btn-pause', () => { if (gameState === 'playing') pauseGame(); });
     // scripted jumpthrow: jump, release the nade on the way up
     press('btn-jt', () => {
         if (gameState !== 'playing') return;
@@ -439,7 +458,7 @@ function setupMobileButtons() {
 
 if (isMobile) {
     setupMobileLook();
-    setupJoystick();
+    setupDpad();
     setupMobileButtons();
 } else {
     renderer.domElement.addEventListener('click', () => {
@@ -478,8 +497,8 @@ function tickPhysics(dt) {
     _right.crossVectors(_fwdH, camera.up);
 
     if (isMobile) {
-        input.forwardMove = THREE.MathUtils.clamp(stick.fwd * 1.4, -1, 1);
-        input.sideMove = THREE.MathUtils.clamp(stick.side * 1.4, -1, 1);
+        input.forwardMove = dpadInput.fwd;
+        input.sideMove = dpadInput.side;
     } else {
         input.forwardMove = (keys.w ? 1 : 0) - (keys.s ? 1 : 0);
         input.sideMove = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);

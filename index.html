@@ -22,14 +22,16 @@
             --text: #e8e6e3;
             --muted: #8a8f98;
         }
-        html, body { height: 100%; overflow: hidden; }
+        html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
         body {
             font-family: 'Segoe UI', -apple-system, Arial, sans-serif;
             background: var(--bg);
             color: var(--text);
             -webkit-user-select: none; user-select: none;
             -webkit-tap-highlight-color: transparent;
+            touch-action: none;
         }
+        #menu { touch-action: pan-y; }
         #canvas-container { width: 100vw; height: 100vh; height: 100dvh; }
 
         /* ---------- overlays ---------- */
@@ -41,11 +43,11 @@
         .hidden { display: none !important; }
 
         /* ---------- menu ---------- */
-        #menu { overflow-y: auto; padding: 24px 16px; }
+        #menu { overflow-y: auto; padding: 24px 16px; justify-content: flex-start; }
         .logo {
             font-size: clamp(34px, 7vw, 64px);
             font-weight: 900; letter-spacing: 2px;
-            margin-top: auto;
+            margin-top: max(4vh, 16px);
         }
         .logo .a { color: var(--accent); }
         .tagline { color: var(--muted); margin: 6px 0 30px; font-size: clamp(12px, 2.5vw, 15px); letter-spacing: 1px; }
@@ -55,6 +57,9 @@
             grid-template-columns: repeat(auto-fit, minmax(150px, 190px));
             justify-content: center; width: 100%; max-width: 900px;
             margin-bottom: 26px;
+        }
+        @media (max-width: 480px) {
+            .maps { grid-template-columns: repeat(2, minmax(130px, 1fr)); gap: 10px; }
         }
         .map-card {
             position: relative; border-radius: 12px; overflow: hidden;
@@ -138,20 +143,40 @@
         #mobile-controls { position: fixed; inset: 0; z-index: 15; pointer-events: none; display: none; }
         body.mobile #mobile-controls { display: block; }
         body.mobile #hud-hint { display: none; }
-        #stick-zone {
-            position: absolute; left: 0; bottom: 0; width: 45%; height: 55%;
-            pointer-events: auto;
+
+        /* D-pad (slide finger between arrows, diagonals work) */
+        #dpad {
+            position: absolute; left: 14px; bottom: 26px;
+            width: 172px; height: 172px; pointer-events: auto;
+            display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+            gap: 4px; touch-action: none;
         }
-        #stick-base {
-            position: absolute; width: 110px; height: 110px; border-radius: 50%;
-            border: 2px solid rgba(255,255,255,.25); background: rgba(255,255,255,.06);
-            display: none;
+        .dp {
+            border-radius: 12px; background: rgba(255,255,255,.09);
+            border: 2px solid rgba(255,255,255,.22);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px; color: rgba(255,255,255,.85); font-weight: 800;
         }
-        #stick-thumb {
-            position: absolute; width: 48px; height: 48px; border-radius: 50%;
-            background: rgba(255,255,255,.35); display: none;
-        }
+        .dp.on { background: rgba(245,184,61,.45); border-color: rgba(245,184,61,.8); }
+        .dp-spacer { pointer-events: none; }
         #look-zone { position: absolute; right: 0; top: 0; width: 55%; height: 100%; pointer-events: auto; }
+
+        #btn-pause {
+            position: absolute; left: 12px; top: 12px; width: 46px; height: 46px;
+            border-radius: 10px; font-size: 20px;
+        }
+
+        /* rotate-to-portrait overlay */
+        #rotate-overlay {
+            position: fixed; inset: 0; z-index: 60; display: none;
+            flex-direction: column; align-items: center; justify-content: center;
+            background: var(--bg); gap: 14px; text-align: center;
+        }
+        #rotate-overlay .ph { font-size: 54px; animation: rot 1.6s ease-in-out infinite; }
+        @keyframes rot { 0%, 25% { transform: rotate(-90deg); } 60%, 100% { transform: rotate(0deg); } }
+        @media (orientation: landscape) {
+            body.mobile #rotate-overlay { display: flex; }
+        }
         .mbtn {
             position: absolute; pointer-events: auto; border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
@@ -226,15 +251,24 @@
 
     <!-- MOBILE CONTROLS -->
     <div id="mobile-controls">
-        <div id="stick-zone">
-            <div id="stick-base"></div>
-            <div id="stick-thumb"></div>
-        </div>
         <div id="look-zone"></div>
+        <div id="dpad">
+            <div class="dp-spacer"></div><div class="dp" data-d="up">▲</div><div class="dp-spacer"></div>
+            <div class="dp" data-d="left">◀</div><div class="dp-spacer"></div><div class="dp" data-d="right">▶</div>
+            <div class="dp-spacer"></div><div class="dp" data-d="down">▼</div><div class="dp-spacer"></div>
+        </div>
         <div class="mbtn" id="btn-throw">THROW</div>
         <div class="mbtn" id="btn-jump">JUMP</div>
         <div class="mbtn" id="btn-jt">JT</div>
         <div class="mbtn" id="btn-clear">C</div>
+        <div class="mbtn" id="btn-pause">☰</div>
+    </div>
+
+    <!-- ROTATE TO PORTRAIT -->
+    <div id="rotate-overlay">
+        <div class="ph">📱</div>
+        <div style="font-weight:800; letter-spacing:1px;">OKRENI TELEFON USPRAVNO</div>
+        <div style="color:var(--muted); font-size:13px;">SMOKEPRACTICE se igra u portrait modu</div>
     </div>
 
     <script type="module" src="./main.js"></script>
