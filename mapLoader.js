@@ -25,6 +25,7 @@ export const MAPS = {
     mirage: {
         name: 'de_mirage',
         path: '/maps/mirage.glb',
+        sizeMB: 35.1, // progress fallback when the server hides Content-Length
         scale: 1 / 0.0254,
         zUp: false,
         // buyzone centers extracted from the VRF physics export (world HU x/z)
