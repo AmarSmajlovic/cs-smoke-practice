@@ -225,9 +225,9 @@ export class GrenadeSystem {
         this.createSmoke(p.clone());
     }
 
-    // CS2-style cloud: dense flattened sphere ~290u wide and ~190u tall that
-    // hugs the ground, but never expands through walls — each particle's
-    // travel is capped by a raycast at spawn time.
+    // CS2-style cloud: dense cream billow ~290u wide that hugs the ground and
+    // never expands through walls (each particle capped by a raycast).
+    // Two particle layers: big puffs for the body + smaller ones for detail.
     createSmoke(groundPos) {
         if (this.smokes.length >= this.maxSmokes) {
             this.removeSmoke(this.smokes[0]);
@@ -235,55 +235,55 @@ export class GrenadeSystem {
 
         // cloud center floats above the detonation point; bottom fills to floor
         const center = groundPos.clone();
-        center.y += CS2.smokeRadius * 0.42;
-
+        center.y += CS2.smokeRadius * 0.4;
         const R = CS2.smokeRadius;
-        const count = 900;
-        const positions = new Float32Array(count * 3);
-        const particles = [];
 
-        for (let i = 0; i < count; i++) {
-            // Random direction, squashed vertically (CS2 smoke is wider than tall)
-            _dir.set(
-                Math.random() * 2 - 1,
-                (Math.random() * 2 - 1) * 0.66,
-                Math.random() * 2 - 1
-            ).normalize();
+        const makeLayer = (count, size, opacity, color, rMin) => {
+            const positions = new Float32Array(count * 3);
+            const particles = [];
+            for (let i = 0; i < count; i++) {
+                _dir.set(
+                    Math.random() * 2 - 1,
+                    (Math.random() * 2 - 1) * 0.58,
+                    Math.random() * 2 - 1
+                ).normalize();
 
-            // Volume-uniform target distance, capped by geometry
-            let target = R * Math.cbrt(0.12 + 0.88 * Math.random());
-            const hit = this.mapLoader.raycast(center, _dir, target + 10);
-            if (hit) target = Math.max(hit.distance - 10, 4);
+                let target = R * Math.cbrt(rMin + (1 - rMin) * Math.random());
+                const hit = this.mapLoader.raycast(center, _dir, target + 10);
+                if (hit) target = Math.max(hit.distance - 10, 4);
 
-            particles.push({
-                dir: _dir.clone(),
-                target,
-                swirlPhase: Math.random() * Math.PI * 2,
-                swirlSpeed: 0.25 + Math.random() * 0.45,
+                particles.push({
+                    dir: _dir.clone(),
+                    target,
+                    swirlPhase: Math.random() * Math.PI * 2,
+                    swirlSpeed: 0.2 + Math.random() * 0.4,
+                });
+                positions[i * 3] = center.x;
+                positions[i * 3 + 1] = groundPos.y + 2;
+                positions[i * 3 + 2] = center.z;
+            }
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            const material = new THREE.PointsMaterial({
+                color, size,
+                map: getSmokeSprite(),
+                transparent: true,
+                opacity,
+                depthWrite: false,
+                sizeAttenuation: true,
             });
-            positions[i * 3] = center.x;
-            positions[i * 3 + 1] = groundPos.y + 2;
-            positions[i * 3 + 2] = center.z;
-        }
+            const mesh = new THREE.Points(geometry, material);
+            this.scene.add(mesh);
+            return { mesh, geometry, material, particles, baseOpacity: opacity };
+        };
 
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-        const material = new THREE.PointsMaterial({
-            color: 0xb2b2b2,
-            size: 95,
-            map: getSmokeSprite(),
-            transparent: true,
-            opacity: 0.92,
-            depthWrite: false,
-            sizeAttenuation: true,
-        });
-
-        const mesh = new THREE.Points(geometry, material);
-        this.scene.add(mesh);
+        const layers = [
+            makeLayer(500, 130, 0.96, 0xdad4c6, 0.10), // big cream body puffs
+            makeLayer(450, 70, 0.9, 0xc9c3b4, 0.30),   // smaller darker detail
+        ];
 
         this.smokes.push({
-            mesh, geometry, material, particles, center,
+            layers, center,
             floorY: groundPos.y,
             startTime: performance.now(),
             time: 0,
@@ -302,32 +302,33 @@ export class GrenadeSystem {
             smoke.time += delta;
             // Fast bloom like CS2: ~90% expanded within the first second
             const bloom = 1 - Math.pow(1 - Math.min(elapsed / 1100, 1), 3);
+            const fadeStart = CS2.smokeDurationMs - 3000;
+            const fade = elapsed > fadeStart ? 1 - (elapsed - fadeStart) / 3000 : 1;
 
-            const pos = smoke.geometry.attributes.position.array;
             const c = smoke.center;
             const floorY = smoke.floorY + 2;
-            for (let j = 0; j < smoke.particles.length; j++) {
-                const pt = smoke.particles[j];
-                const d = pt.target * bloom;
-                const swirl = Math.sin(smoke.time * pt.swirlSpeed + pt.swirlPhase) * 6;
-                pos[j * 3] = c.x + pt.dir.x * d + swirl;
-                pos[j * 3 + 1] = Math.max(c.y + pt.dir.y * d, floorY) + Math.abs(swirl) * 0.3;
-                pos[j * 3 + 2] = c.z + pt.dir.z * d - swirl;
+            for (const layer of smoke.layers) {
+                const pos = layer.geometry.attributes.position.array;
+                for (let j = 0; j < layer.particles.length; j++) {
+                    const pt = layer.particles[j];
+                    const d = pt.target * bloom;
+                    const swirl = Math.sin(smoke.time * pt.swirlSpeed + pt.swirlPhase) * 6;
+                    pos[j * 3] = c.x + pt.dir.x * d + swirl;
+                    pos[j * 3 + 1] = Math.max(c.y + pt.dir.y * d, floorY) + Math.abs(swirl) * 0.3;
+                    pos[j * 3 + 2] = c.z + pt.dir.z * d - swirl;
+                }
+                layer.geometry.attributes.position.needsUpdate = true;
+                layer.material.opacity = layer.baseOpacity * fade;
             }
-            smoke.geometry.attributes.position.needsUpdate = true;
-
-            // Fade out over the last 3 seconds
-            const fadeStart = CS2.smokeDurationMs - 3000;
-            smoke.material.opacity = elapsed > fadeStart
-                ? 0.92 * (1 - (elapsed - fadeStart) / 3000)
-                : 0.92;
         }
     }
 
     removeSmoke(smoke) {
-        this.scene.remove(smoke.mesh);
-        smoke.geometry.dispose();
-        smoke.material.dispose();
+        for (const layer of smoke.layers) {
+            this.scene.remove(layer.mesh);
+            layer.geometry.dispose();
+            layer.material.dispose();
+        }
         const idx = this.smokes.indexOf(smoke);
         if (idx !== -1) this.smokes.splice(idx, 1);
     }
@@ -346,19 +347,37 @@ const _down = new THREE.Vector3(0, -1, 0);
 const TRAIL_MAX = 640;
 const MAX_TRAILS = 4;
 
-// Soft radial sprite so smoke particles blend into a cloud instead of squares
+// Puffy "cauliflower" sprite: several overlapping soft blobs instead of one
+// smooth circle, so overlapping particles read as billowing CS2-style smoke
 let _smokeSprite = null;
 function getSmokeSprite() {
     if (_smokeSprite) return _smokeSprite;
+    const S = 128;
     const c = document.createElement('canvas');
-    c.width = c.height = 64;
+    c.width = c.height = S;
     const ctx = c.getContext('2d');
-    const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-    grad.addColorStop(0, 'rgba(255,255,255,0.9)');
-    grad.addColorStop(0.5, 'rgba(255,255,255,0.45)');
-    grad.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 64, 64);
+
+    const blob = (x, y, r, a) => {
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, `rgba(255,255,255,${a})`);
+        g.addColorStop(0.65, `rgba(255,255,255,${a * 0.55})`);
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+    };
+
+    // main body
+    blob(S / 2, S / 2, S * 0.42, 0.95);
+    // surrounding puffs (fixed pseudo-random layout)
+    const puffs = [
+        [0.34, 0.36, 0.20], [0.66, 0.34, 0.17], [0.30, 0.62, 0.18],
+        [0.68, 0.64, 0.20], [0.50, 0.28, 0.16], [0.50, 0.72, 0.16],
+        [0.26, 0.48, 0.14], [0.74, 0.48, 0.14],
+    ];
+    for (const [px, py, pr] of puffs) blob(px * S, py * S, pr * S, 0.85);
+
     _smokeSprite = new THREE.CanvasTexture(c);
     return _smokeSprite;
 }

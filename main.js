@@ -232,7 +232,10 @@ async function startGame(mapKey) {
         map = await mapLoader.loadMap(mapDef, null, (stage, loaded, total) => {
             if (stage === 'download') {
                 const mb = (loaded / 1048576).toFixed(1);
-                if (total > 0) setLoadProgress(Math.min(90, (loaded / total) * 88));
+                // CDNs often hide Content-Length (compressed streams) -> fall
+                // back to the known file size so the bar still moves
+                const effTotal = total > 0 ? total : (mapDef.sizeMB ? mapDef.sizeMB * 1048576 : 0);
+                if (effTotal > 0) setLoadProgress(Math.min(90, (loaded / effTotal) * 88));
                 $('load-status').textContent = `Downloading map… ${mb} MB`;
             } else if (stage === 'build') {
                 setLoadProgress(93);
@@ -404,26 +407,28 @@ document.addEventListener('keyup', (e) => {
     if (e.code === 'Space') keys.space = false;
 });
 
-// Throw: LMB = full, RMB = underhand, LMB+RMB = medium. Release to throw.
-let leftHeld = false, rightHeld = false, bothWereHeld = false;
+// Throw: LMB = full, RMB = underhand (lob), LMB+RMB = medium.
+// A "gesture" collects every button pressed until ALL are released, then
+// throws once — state always resets so a failed throw can't corrupt the next.
+let leftHeld = false, rightHeld = false;
+let gestureL = false, gestureR = false;
 
 document.addEventListener('mousedown', (e) => {
-    if (gameState !== 'playing' || isMobile || !controls.isLocked || !hasSmoke) return;
-    if (e.button === 0) leftHeld = true;
-    if (e.button === 2) rightHeld = true;
-    if (leftHeld && rightHeld) bothWereHeld = true;
+    if (gameState !== 'playing' || isMobile || !controls.isLocked) return;
+    if (e.button === 0) { leftHeld = true; gestureL = true; }
+    if (e.button === 2) { rightHeld = true; gestureR = true; }
 });
 
 document.addEventListener('mouseup', (e) => {
     if (e.button !== 0 && e.button !== 2) return;
-    const wasThrowing = leftHeld || rightHeld;
-    const strength = bothWereHeld ? 0.5 : (leftHeld ? 1.0 : 0.0);
     if (e.button === 0) leftHeld = false;
     if (e.button === 2) rightHeld = false;
-    if (leftHeld || rightHeld) return;
+    if (leftHeld || rightHeld) return; // wait until every button is released
 
-    if (wasThrowing && gameState === 'playing' && controls.isLocked && hasSmoke) {
-        bothWereHeld = false;
+    const strength = gestureL && gestureR ? 0.5 : gestureL ? 1.0 : gestureR ? 0.0 : null;
+    gestureL = gestureR = false;
+
+    if (strength !== null && gameState === 'playing' && controls.isLocked && hasSmoke) {
         throwSmoke(strength);
     }
 });
