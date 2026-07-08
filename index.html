@@ -179,6 +179,31 @@
             font-size: 12px; color: rgba(255,255,255,.5); pointer-events: none; letter-spacing: .5px;
         }
 
+        /* throw-type helper (desktop): little mouse diagrams, lights up live */
+        #throw-help {
+            position: fixed; right: 14px; bottom: 14px; z-index: 10;
+            display: flex; flex-direction: column; gap: 7px;
+            pointer-events: none; opacity: .8;
+        }
+        body.mobile #throw-help { display: none; }
+        .th-row {
+            display: flex; align-items: center; gap: 9px;
+            font-size: 11px; font-weight: 700; letter-spacing: 1.2px;
+            color: rgba(255,255,255,.55);
+            transition: color .1s;
+        }
+        .th-row.act { color: var(--accent); }
+        .mouse {
+            display: inline-flex; width: 20px; height: 28px;
+            border: 2px solid rgba(255,255,255,.45); border-radius: 9px 9px 10px 10px;
+            overflow: hidden;
+        }
+        .th-row.act .mouse { border-color: var(--accent); }
+        .mb { flex: 1; height: 12px; }
+        .mb.l { border-right: 1px solid rgba(255,255,255,.35); }
+        .mb.on { background: rgba(255,255,255,.55); }
+        .th-row.act .mb.on { background: var(--accent); }
+
         /* ---------- mobile controls ---------- */
         #mobile-controls { position: fixed; inset: 0; z-index: 15; pointer-events: none; display: none; }
         body.mobile #mobile-controls { display: block; }
@@ -228,7 +253,9 @@
         .mbtn:active { background: rgba(245,184,61,.45); }
         #btn-throw { right: 18px; bottom: 96px; width: 84px; height: 84px; font-size: 13px; background: rgba(245,184,61,.22); border-color: rgba(245,184,61,.6); }
         #btn-jump { right: 118px; bottom: 26px; width: 64px; height: 64px; font-size: 12px; }
-        #btn-jt { right: 26px; bottom: 200px; width: 60px; height: 60px; font-size: 12px; }
+        #btn-jt { right: 26px; bottom: 200px; width: 60px; height: 60px; font-size: 11px; }
+        #btn-med { right: 118px; bottom: 118px; width: 54px; height: 54px; font-size: 10px; }
+        #btn-lob { right: 106px; bottom: 190px; width: 54px; height: 54px; font-size: 10px; }
         #btn-clear { right: 12px; top: 12px; width: 44px; height: 44px; font-size: 11px; border-radius: 10px; }
         #btn-fly { right: 66px; top: 12px; width: 44px; height: 44px; font-size: 10px; border-radius: 10px; }
         .mbtn.act { background: rgba(245,184,61,.5); border-color: var(--accent); }
@@ -241,7 +268,13 @@
     <!-- HUD -->
     <div id="crosshair" class="hidden"></div>
     <div id="pos-display" class="hidden"></div>
-    <div id="hud-hint" class="hidden">LMB full / RMB lob &nbsp;•&nbsp; SPACE+release = jumpthrow &nbsp;•&nbsp; V noclip &nbsp;•&nbsp; C clear smokes+trails &nbsp;•&nbsp; R respawn</div>
+    <div id="hud-hint" class="hidden">SPACE+release = jumpthrow &nbsp;•&nbsp; V noclip &nbsp;•&nbsp; C clear smokes+trails &nbsp;•&nbsp; R respawn</div>
+
+    <div id="throw-help" class="hidden">
+        <div class="th-row" id="th-full"><span class="mouse"><span class="mb l on"></span><span class="mb r"></span></span> FULL THROW</div>
+        <div class="th-row" id="th-med"><span class="mouse"><span class="mb l on"></span><span class="mb r on"></span></span> MEDIUM</div>
+        <div class="th-row" id="th-lob"><span class="mouse"><span class="mb l"></span><span class="mb r on"></span></span> LOB (SHORT)</div>
+    </div>
 
     <!-- MAIN MENU -->
     <div id="menu" class="overlay">
@@ -307,7 +340,7 @@
         <div class="keys-hint mobile-hint">
             <b>▲▼◀▶</b> move (slide finger for diagonals)<br>
             drag the <b>right side</b> of the screen to look around<br>
-            <b>THROW</b> full throw (leaves a trail) &nbsp; <b>JT</b> = auto jumpthrow &nbsp; <b>JUMP</b> jump<br>
+            <b>THROW</b> full &nbsp; <b>MED</b> medium &nbsp; <b>LOB</b> short &nbsp; <b>JT</b> = auto jumpthrow<br>
             <b>FLY</b> noclip &nbsp; <b>C</b> clear smokes+trails &nbsp; <b>☰</b> pause
         </div>
     </div>
@@ -321,6 +354,8 @@
             <div class="dp-spacer"></div><div class="dp" data-d="down">▼</div><div class="dp-spacer"></div>
         </div>
         <div class="mbtn" id="btn-throw">THROW</div>
+        <div class="mbtn" id="btn-med">MED</div>
+        <div class="mbtn" id="btn-lob">LOB</div>
         <div class="mbtn" id="btn-jump">JUMP</div>
         <div class="mbtn" id="btn-jt">JT</div>
         <div class="mbtn" id="btn-clear">C</div>
