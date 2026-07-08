@@ -63,7 +63,7 @@ controls.addEventListener('lock', () => {
 });
 document.addEventListener('pointerlockerror', () => {
     if (gameState === 'paused') {
-        document.querySelector('#resume h2').textContent = 'SAČEKAJ SEKUNDU PA KLIKNI OPET';
+        document.querySelector('#resume h2').textContent = 'WAIT A SECOND, THEN CLICK AGAIN';
     }
 });
 
@@ -224,32 +224,28 @@ async function startGame(mapKey) {
     gameState = 'loading';
     hide('menu');
     $('load-map-name').textContent = (mapDef.name || mapKey).toUpperCase();
-    $('bar').style.width = '0%';
-    $('load-status').textContent = 'Preuzimanje mape…';
+    setLoadProgress(0);
+    $('load-status').textContent = 'Downloading map…';
     show('loading');
 
     try {
         map = await mapLoader.loadMap(mapDef, null, (stage, loaded, total) => {
             if (stage === 'download') {
-                if (total > 0) {
-                    const pct = Math.min(92, (loaded / total) * 88);
-                    $('bar').style.width = pct + '%';
-                    $('load-status').textContent = `Preuzimanje mape… ${(loaded / 1048576).toFixed(1)} MB`;
-                } else {
-                    $('load-status').textContent = `Preuzimanje mape… ${(loaded / 1048576).toFixed(1)} MB`;
-                }
+                const mb = (loaded / 1048576).toFixed(1);
+                if (total > 0) setLoadProgress(Math.min(90, (loaded / total) * 88));
+                $('load-status').textContent = `Downloading map… ${mb} MB`;
             } else if (stage === 'build') {
-                $('bar').style.width = '92%';
-                $('load-status').textContent = 'Priprema kolizije (BVH)…';
+                setLoadProgress(93);
+                $('load-status').textContent = 'Building collision…';
             }
         });
     } catch (e) {
         console.error('Map load failed:', e);
-        $('load-status').textContent = 'Greška pri učitavanju mape :(';
+        $('load-status').textContent = 'Failed to load the map :(';
         return;
     }
 
-    $('bar').style.width = '100%';
+    setLoadProgress(100);
     findSpawn();
     player.spawn(spawnPoint.x, spawnPoint.y, spawnPoint.z);
     player.getEyePosition(camera.position);
@@ -263,14 +259,20 @@ async function startGame(mapKey) {
         gameState = 'playing';
     } else {
         gameState = 'paused';
-        showResume('KLIKNI "NASTAVI" ZA IGRU');
+        showResume('CLICK "RESUME" TO PLAY');
     }
+}
+
+// Map image "fills in" with color as the download progresses
+function setLoadProgress(pct) {
+    $('load-fill').style.clipPath = `inset(0 ${100 - pct}% 0 0)`;
+    $('load-pct').textContent = Math.round(pct) + '%';
 }
 
 function pauseGame() {
     if (gameState !== 'playing') return;
     gameState = 'paused';
-    showResume('PAUZA');
+    showResume('PAUSED');
 }
 
 function showResume(title) {
