@@ -30,15 +30,9 @@ const camera = new THREE.PerspectiveCamera(73.74, window.innerWidth / window.inn
 scene.add(camera);
 
 function applyFov() {
-    const aspect = window.innerWidth / window.innerHeight;
-    camera.aspect = aspect;
-    if (aspect < 1) {
-        // portrait: keep ~85° horizontal FOV, capped so it doesn't fisheye
-        const h = THREE.MathUtils.degToRad(85);
-        camera.fov = Math.min(105, THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(h / 2) / aspect)));
-    } else {
-        camera.fov = 73.74;
-    }
+    // CS2 behavior: vertical FOV fixed, wider screens see more horizontally
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.fov = 73.74;
     camera.updateProjectionMatrix();
 }
 applyFov();
@@ -76,7 +70,7 @@ document.addEventListener('pointerlockerror', () => {
 // JS fallback for the rotate overlay (iOS quirks with the CSS media query)
 function updateOrientationClass() {
     if (!isMobile) return;
-    document.body.classList.toggle('landscape', window.innerWidth > window.innerHeight);
+    document.body.classList.toggle('portrait', window.innerHeight > window.innerWidth);
 }
 updateOrientationClass();
 window.addEventListener('orientationchange', () => setTimeout(updateOrientationClass, 120));
@@ -211,21 +205,21 @@ function findSpawn() {
 }
 
 // ---------------------------------------------------------------- Game flow
-// Best effort: keep the game in portrait on mobile (Android supports the
-// lock; on iOS the rotate overlay asks the user instead)
-async function lockPortrait() {
+// Best effort: keep the game in landscape on mobile, PUBG-style (Android
+// supports the lock; on iOS the rotate overlay asks the user instead)
+async function lockLandscape() {
     try {
         if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
             await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
         }
         if (screen.orientation && screen.orientation.lock) {
-            await screen.orientation.lock('portrait');
+            await screen.orientation.lock('landscape');
         }
     } catch (e) { /* iOS Safari — CSS rotate overlay covers this */ }
 }
 
 async function startGame(mapKey) {
-    if (isMobile) lockPortrait();
+    if (isMobile) lockLandscape();
     mapDef = MAPS[mapKey];
     gameState = 'loading';
     hide('menu');
@@ -485,10 +479,10 @@ if (isMobile) {
     setupMobileLook();
     setupDpad();
     setupMobileButtons();
-    // Lock to portrait at the FIRST tap anywhere (browsers require a user
+    // Lock to landscape at the FIRST tap anywhere (browsers require a user
     // gesture before fullscreen/orientation APIs are allowed)
     const firstTouch = () => {
-        lockPortrait();
+        lockLandscape();
         document.removeEventListener('touchend', firstTouch);
         document.removeEventListener('click', firstTouch);
     };

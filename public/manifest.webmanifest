@@ -4,7 +4,7 @@
     "description": "Practice CS2 smoke lineups in your browser. Real maps, exact physics.",
     "start_url": "/",
     "display": "fullscreen",
-    "orientation": "portrait",
+    "orientation": "landscape",
     "background_color": "#0e1013",
     "theme_color": "#0e1013",
     "icons": [

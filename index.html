@@ -173,18 +173,18 @@
             border-radius: 10px; font-size: 20px;
         }
 
-        /* rotate-to-portrait overlay */
+        /* rotate-to-landscape overlay (game is played horizontally, PUBG-style) */
         #rotate-overlay {
             position: fixed; inset: 0; z-index: 60; display: none;
             flex-direction: column; align-items: center; justify-content: center;
             background: var(--bg); gap: 14px; text-align: center;
         }
         #rotate-overlay .ph { font-size: 54px; animation: rot 1.6s ease-in-out infinite; }
-        @keyframes rot { 0%, 25% { transform: rotate(-90deg); } 60%, 100% { transform: rotate(0deg); } }
-        @media (orientation: landscape) {
+        @keyframes rot { 0%, 25% { transform: rotate(0deg); } 60%, 100% { transform: rotate(90deg); } }
+        @media (orientation: portrait) {
             body.mobile #rotate-overlay { display: flex; }
         }
-        body.mobile.landscape #rotate-overlay { display: flex; }
+        body.mobile.portrait #rotate-overlay { display: flex; }
         .mbtn {
             position: absolute; pointer-events: auto; border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
@@ -278,11 +278,11 @@
         <div class="mbtn" id="btn-pause">☰</div>
     </div>
 
-    <!-- ROTATE TO PORTRAIT -->
+    <!-- ROTATE TO LANDSCAPE -->
     <div id="rotate-overlay">
         <div class="ph">📱</div>
-        <div style="font-weight:800; letter-spacing:1px;">OKRENI TELEFON USPRAVNO</div>
-        <div style="color:var(--muted); font-size:13px;">SMOKEPRACTICE se igra u portrait modu</div>
+        <div style="font-weight:800; letter-spacing:1px;">OKRENI TELEFON VODORAVNO</div>
+        <div style="color:var(--muted); font-size:13px;">SMOKEPRACTICE se igra u landscape modu</div>
     </div>
 
     <script type="module" src="./main.js"></script>
