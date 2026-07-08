@@ -1,475 +1,531 @@
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { MapLoader } from './mapLoader.js';
+import GUI from 'lil-gui';
+import { MapLoader, MAPS } from './mapLoader.js';
+import { Player } from './player.js';
+import { GrenadeSystem } from './grenades.js';
+import { CS2, tuning } from './physicsConfig.js';
 
+// ---------------------------------------------------------------- State
+const isMobile = 'ontouchstart' in window && matchMedia('(pointer: coarse)').matches;
+if (isMobile) document.body.classList.add('mobile');
 
-// Scene
+let gameState = 'menu'; // menu | loading | playing | paused
+let spawnChoice = 'T';
+let mapDef = null;
+let map = null;
+const spawnPoint = new THREE.Vector3(0, 200, 0);
+
+const $ = (id) => document.getElementById(id);
+const show = (id) => $(id).classList.remove('hidden');
+const hide = (id) => $(id).classList.add('hidden');
+
+// ---------------------------------------------------------------- Scene
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
-scene.fog = new THREE.Fog(0x87ceeb, 0, 750);
 
-// Camera
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.set(0, 2, 5);
+// CS2: 90° horizontal FOV at 4:3 = 73.74° vertical; portrait keeps a wide view
+const camera = new THREE.PerspectiveCamera(73.74, window.innerWidth / window.innerHeight, 1, 30000);
+scene.add(camera);
 
-// Renderer
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+function applyFov() {
+    const aspect = window.innerWidth / window.innerHeight;
+    camera.aspect = aspect;
+    if (aspect < 1) {
+        // portrait: keep ~85° horizontal FOV, capped so it doesn't fisheye
+        const h = THREE.MathUtils.degToRad(85);
+        camera.fov = Math.min(105, THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(h / 2) / aspect)));
+    } else {
+        camera.fov = 73.74;
+    }
+    camera.updateProjectionMatrix();
+}
+applyFov();
+
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true;
-document.getElementById('canvas-container').appendChild(renderer.domElement);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+$('canvas-container').appendChild(renderer.domElement);
 
-// Controls
-const controls = new PointerLockControls(camera, renderer.domElement);
-
-renderer.domElement.addEventListener('click', () => controls.lock());
-controls.addEventListener('lock', () => document.getElementById('info').style.display = 'none');
-controls.addEventListener('unlock', () => document.getElementById('info').style.display = 'block');
-
-// Lighting
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-dirLight.position.set(50, 100, 50);
+// Calibrated for three's physical lighting mode (r155+)
+scene.add(new THREE.HemisphereLight(0xe8f0ff, 0x8a7a60, 2.0));
+const dirLight = new THREE.DirectionalLight(0xfff2dd, 1.1);
+dirLight.position.set(2000, 4000, 1500);
 scene.add(dirLight);
 
-// Load map
-const mapLoader = new MapLoader(scene);
-let map = null;
+// ---------------------------------------------------------------- Look controls
+const controls = new PointerLockControls(camera, renderer.domElement);
+controls.addEventListener('unlock', () => {
+    if (gameState === 'playing') pauseGame();
+});
 
-// Try Rapier, fallback to simple
-let physics = null;
-let smokeSystem = null;
+// Mobile look: drag on the right side of the screen
+const mobileLook = { euler: new THREE.Euler(0, 0, 0, 'YXZ'), active: false, id: -1, lastX: 0, lastY: 0 };
+const LOOK_SENS = 0.0042;
 
-try {
-    const { RapierPhysics } = await import('./rapier-physics.js');
-    physics = new RapierPhysics();
-    await physics.init();
-    
-    if (physics.initialized) {
-        const { SmokeSystemRapier } = await import('./smoke-rapier.js');
-        smokeSystem = new SmokeSystemRapier(scene, physics);
-        console.log('✅ Using Rapier physics');
-    }
-} catch (e) {
-    console.log('⚠️ Rapier failed, using simple physics');
-}
-
-if (!smokeSystem) {
-    const { SmokeSystem } = await import('./smoke-simple.js');
-    smokeSystem = new SmokeSystem(scene);
-}
-
-let mapGroundY = 0;
-
-async function loadMap() {
-    try {
-        map = await mapLoader.loadMap('/maps/dust2.glb');
-        console.log('Map loaded!');
-        
-        // Calculate map ground level
-        const box = new THREE.Box3().setFromObject(map);
-        mapGroundY = box.min.y;
-        console.log('Map ground Y:', mapGroundY);
-        console.log('Map bounds:', box.min, box.max);
-        
-        // Position camera ABOVE ground level (add extra height)
-        camera.position.y = mapGroundY + 10; // Start 10 units above ground
-        console.log('Camera starting at Y:', camera.position.y);
-        
-        // Add map collision to Rapier if available
-        if (physics && physics.addMapCollision) {
-            physics.addMapCollision(map);
+function setupMobileLook() {
+    const zone = $('look-zone');
+    zone.addEventListener('touchstart', (e) => {
+        if (mobileLook.id !== -1) return;
+        const t = e.changedTouches[0];
+        mobileLook.id = t.identifier;
+        mobileLook.lastX = t.clientX;
+        mobileLook.lastY = t.clientY;
+    }, { passive: true });
+    zone.addEventListener('touchmove', (e) => {
+        for (const t of e.changedTouches) {
+            if (t.identifier !== mobileLook.id) continue;
+            const dx = t.clientX - mobileLook.lastX;
+            const dy = t.clientY - mobileLook.lastY;
+            mobileLook.lastX = t.clientX;
+            mobileLook.lastY = t.clientY;
+            mobileLook.euler.setFromQuaternion(camera.quaternion);
+            mobileLook.euler.y -= dx * LOOK_SENS;
+            mobileLook.euler.x -= dy * LOOK_SENS;
+            mobileLook.euler.x = THREE.MathUtils.clamp(mobileLook.euler.x, -Math.PI / 2 + 0.01, Math.PI / 2 - 0.01);
+            camera.quaternion.setFromEuler(mobileLook.euler);
         }
-        
-        // Find ladders in the map (meshes with "ladder" in name)
-        map.traverse((child) => {
-            if (child.isMesh && child.name.toLowerCase().includes('ladder')) {
-                const box = new THREE.Box3().setFromObject(child);
-                ladderZones.push(box);
-                console.log('🪜 Found ladder:', child.name, box);
+        e.preventDefault();
+    }, { passive: false });
+    const end = (e) => {
+        for (const t of e.changedTouches) if (t.identifier === mobileLook.id) mobileLook.id = -1;
+    };
+    zone.addEventListener('touchend', end);
+    zone.addEventListener('touchcancel', end);
+}
+
+// Mobile joystick: left side
+const stick = { id: -1, baseX: 0, baseY: 0, fwd: 0, side: 0 };
+function setupJoystick() {
+    const zone = $('stick-zone');
+    const base = $('stick-base');
+    const thumb = $('stick-thumb');
+    const R = 55;
+    zone.addEventListener('touchstart', (e) => {
+        if (stick.id !== -1) return;
+        const t = e.changedTouches[0];
+        stick.id = t.identifier;
+        stick.baseX = t.clientX;
+        stick.baseY = t.clientY;
+        base.style.display = thumb.style.display = 'block';
+        base.style.left = (t.clientX - R) + 'px';
+        base.style.top = (t.clientY - R) + 'px';
+        thumb.style.left = (t.clientX - 24) + 'px';
+        thumb.style.top = (t.clientY - 24) + 'px';
+        e.preventDefault();
+    }, { passive: false });
+    zone.addEventListener('touchmove', (e) => {
+        for (const t of e.changedTouches) {
+            if (t.identifier !== stick.id) continue;
+            let dx = t.clientX - stick.baseX;
+            let dy = t.clientY - stick.baseY;
+            const len = Math.hypot(dx, dy);
+            if (len > R) { dx *= R / len; dy *= R / len; }
+            thumb.style.left = (stick.baseX + dx - 24) + 'px';
+            thumb.style.top = (stick.baseY + dy - 24) + 'px';
+            stick.side = dx / R;
+            stick.fwd = -dy / R;
+        }
+        e.preventDefault();
+    }, { passive: false });
+    const end = (e) => {
+        for (const t of e.changedTouches) {
+            if (t.identifier !== stick.id) continue;
+            stick.id = -1;
+            stick.fwd = stick.side = 0;
+            $('stick-base').style.display = $('stick-thumb').style.display = 'none';
+        }
+    };
+    zone.addEventListener('touchend', end);
+    zone.addEventListener('touchcancel', end);
+}
+
+// ---------------------------------------------------------------- World
+const mapLoader = new MapLoader(scene);
+const player = new Player();
+const grenades = new GrenadeSystem(scene, mapLoader);
+
+function findSpawn() {
+    const box = new THREE.Box3().setFromObject(map);
+    const down = new THREE.Vector3(0, -1, 0);
+
+    // Preferred: real spawn location for the chosen side
+    const s = mapDef.spawns && mapDef.spawns[spawnChoice];
+    if (s) {
+        const hit = mapLoader.raycast(new THREE.Vector3(s.x, box.max.y + 10, s.z), down, box.max.y - box.min.y + 20);
+        if (hit) {
+            spawnPoint.set(s.x, hit.point.y + 2, s.z);
+            console.log(`Spawn ${spawnChoice}:`, spawnPoint.x.toFixed(0), spawnPoint.y.toFixed(0), spawnPoint.z.toFixed(0));
+            return;
+        }
+    }
+
+    // Fallback: probe for a flat open floor near the center
+    const up = new THREE.Vector3(0, 1, 0);
+    const height = box.max.y - box.min.y;
+    const candidates = [];
+    const step = 150;
+    for (let x = box.min.x + step; x < box.max.x; x += step) {
+        for (let z = box.min.z + step; z < box.max.z; z += step) {
+            const hit = mapLoader.raycast(new THREE.Vector3(x, box.max.y + 10, z), down, height + 20);
+            if (!hit || Math.abs(hit.face.normal.y) < 0.95) continue;
+            if (mapLoader.raycast(new THREE.Vector3(x, hit.point.y + 2, z), up, 160)) continue;
+            candidates.push(new THREE.Vector3(x, hit.point.y, z));
+        }
+    }
+    const center = box.getCenter(new THREE.Vector3());
+    if (candidates.length) {
+        const minY = Math.min(...candidates.map(c => c.y));
+        const low = candidates.filter(c => c.y <= minY + 300);
+        low.sort((a, b) => (a.x - center.x) ** 2 + (a.z - center.z) ** 2 - ((b.x - center.x) ** 2 + (b.z - center.z) ** 2));
+        spawnPoint.copy(low[0]).setY(low[0].y + 2);
+    } else {
+        spawnPoint.set(center.x, box.max.y + 10, center.z);
+    }
+}
+
+// ---------------------------------------------------------------- Game flow
+async function startGame(mapKey) {
+    mapDef = MAPS[mapKey];
+    gameState = 'loading';
+    hide('menu');
+    $('load-map-name').textContent = (mapDef.name || mapKey).toUpperCase();
+    $('bar').style.width = '0%';
+    $('load-status').textContent = 'Preuzimanje mape…';
+    show('loading');
+
+    try {
+        map = await mapLoader.loadMap(mapDef, null, (stage, loaded, total) => {
+            if (stage === 'download') {
+                if (total > 0) {
+                    const pct = Math.min(92, (loaded / total) * 88);
+                    $('bar').style.width = pct + '%';
+                    $('load-status').textContent = `Preuzimanje mape… ${(loaded / 1048576).toFixed(1)} MB`;
+                } else {
+                    $('load-status').textContent = `Preuzimanje mape… ${(loaded / 1048576).toFixed(1)} MB`;
+                }
+            } else if (stage === 'build') {
+                $('bar').style.width = '92%';
+                $('load-status').textContent = 'Priprema kolizije (BVH)…';
             }
         });
-        
-        console.log(`Found ${ladderZones.length} ladders`);
-        
-        // Scale slider
-        const slider = document.getElementById('scale-slider');
-        const value = document.getElementById('scale-value');
-        slider.addEventListener('input', (e) => {
-            const s = parseFloat(e.target.value);
-            map.scale.set(s, s, s);
-            value.textContent = s.toFixed(1);
-            
-            // Recalculate ground
-            const newBox = new THREE.Box3().setFromObject(map);
-            mapGroundY = newBox.min.y;
-            console.log('New ground Y:', mapGroundY);
-        });
     } catch (e) {
-        console.log('No map found');
+        console.error('Map load failed:', e);
+        $('load-status').textContent = 'Greška pri učitavanju mape :(';
+        return;
+    }
+
+    $('bar').style.width = '100%';
+    findSpawn();
+    player.spawn(spawnPoint.x, spawnPoint.y, spawnPoint.z);
+    player.getEyePosition(camera.position);
+
+    hide('loading');
+    show('crosshair');
+    show('pos-display');
+    if (!isMobile) show('hud-hint');
+
+    if (isMobile) {
+        gameState = 'playing';
+    } else {
+        gameState = 'paused';
+        showResume('KLIKNI "NASTAVI" ZA IGRU');
     }
 }
 
-loadMap();
+function pauseGame() {
+    if (gameState !== 'playing') return;
+    gameState = 'paused';
+    showResume('PAUZA');
+}
 
-// Movement
-const moveSpeed = 6;
-const keys = { w: false, a: false, s: false, d: false, shift: false, ctrl: false, space: false };
+function showResume(title) {
+    document.querySelector('#resume h2').textContent = title;
+    show('resume');
+}
 
-// Grenade in hand (placeholder)
+function resumeGame() {
+    hide('resume');
+    gameState = 'playing';
+    if (!isMobile) controls.lock();
+}
+
+function backToMenu() {
+    hide('resume');
+    hide('crosshair');
+    hide('pos-display');
+    hide('hud-hint');
+    grenades.clearAllSmokes();
+    mapLoader.unload();
+    map = null;
+    gameState = 'menu';
+    show('menu');
+}
+
+// Menu wiring
+document.querySelector('.map-card.playable[data-map="mirage"]').addEventListener('click', () => {
+    if (gameState === 'menu') startGame('mirage');
+});
+$('spawn-t').addEventListener('click', () => {
+    spawnChoice = 'T';
+    $('spawn-t').classList.add('active');
+    $('spawn-ct').classList.remove('active');
+});
+$('spawn-ct').addEventListener('click', () => {
+    spawnChoice = 'CT';
+    $('spawn-ct').classList.add('active');
+    $('spawn-t').classList.remove('active');
+});
+$('btn-resume').addEventListener('click', resumeGame);
+$('btn-menu').addEventListener('click', backToMenu);
+
+// ---------------------------------------------------------------- Viewmodel
 let grenadeInHand = null;
-let hasSmoke = false;
-
-async function createGrenadeInHand() {
-    const loader = new GLTFLoader();
-    
-    try {
-        const gltf = await loader.loadAsync('/models/smoke_grenade.glb');
-        grenadeInHand = gltf.scene;
-        grenadeInHand.scale.set(0.002, 0.002, 0.002); // 2x bigger (zoomed in)
-        console.log('✅ GLB grenade model loaded for hand');
-    } catch (e) {
-        console.log('⚠️ GLB load failed, using placeholder:', e.message);
-        // Fallback to placeholder
-        const geometry = new THREE.SphereGeometry(0.03, 8, 8);
-        const material = new THREE.MeshStandardMaterial({ 
-            color: 0x888888,
-            metalness: 0.8,
-            roughness: 0.2
-        });
-        grenadeInHand = new THREE.Mesh(geometry, material);
-    }
-    
-    grenadeInHand.visible = false;
-    
-    // Add to camera so it moves with view
-    scene.add(camera);
-    camera.add(grenadeInHand);
-    grenadeInHand.position.set(0.12, -0.12, -0.25); // Closer to camera, more visible
-    grenadeInHand.rotation.set(0.3, -0.3, 0.1); // Better angle
-    
-    console.log('✅ Grenade in hand ready');
-}
-
-createGrenadeInHand();
-
-// Physics
-let velocityY = 0;
-const gravity = -20;
-const jumpForce = 7;
-let isOnGround = true;
-
-// Head bobbing
+let hasSmoke = true;
+const vmBase = new THREE.Vector3(6.5, -5.5, -13);
 let bobPhase = 0;
-const bobSpeed = 3; // Slower, more realistic
-const bobAmount = 0.008; // Very subtle
-let currentBobAmount = 0;
+const sway = { x: 0, y: 0 };
+let lastCamYaw = 0, lastCamPitch = 0;
 
-// Smooth movement
-let currentVelocity = new THREE.Vector3();
-const acceleration = 30;
-const friction = 15;
+(async function createGrenadeInHand() {
+    try {
+        const gltf = await new GLTFLoader().loadAsync('/models/smoke_grenade.glb');
+        grenadeInHand = gltf.scene;
+        grenadeInHand.scale.setScalar(0.035);
+    } catch (e) {
+        grenadeInHand = new THREE.Mesh(
+            new THREE.SphereGeometry(1.2, 10, 10),
+            new THREE.MeshLambertMaterial({ color: 0x4a5d4a })
+        );
+    }
+    camera.add(grenadeInHand);
+    grenadeInHand.position.copy(vmBase);
+    grenadeInHand.rotation.set(0.3, -0.3, 0.1);
+    grenadeInHand.visible = hasSmoke;
+})();
 
-// Ladder system
-let ladderZones = []; // Array of ladder bounding boxes
-let isOnLadder = false;
-const ladderClimbSpeed = 4;
+function updateViewmodel(delta) {
+    if (!grenadeInHand || !grenadeInHand.visible) return;
+
+    // walk bob (classic CS-style figure-eight)
+    const hSpeed = Math.hypot(player.velocity.x, player.velocity.z);
+    const speedFactor = Math.min(hSpeed / CS2.maxspeed, 1);
+    if (player.onGround && hSpeed > 5) {
+        bobPhase += delta * 9.5 * speedFactor;
+    }
+    const bobX = Math.sin(bobPhase) * 0.55 * speedFactor;
+    const bobY = -Math.abs(Math.cos(bobPhase)) * 0.4 * speedFactor;
+
+    // sway: viewmodel lags behind camera rotation
+    _vmEuler.setFromQuaternion(camera.quaternion);
+    const yawDelta = _vmEuler.y - lastCamYaw;
+    const pitchDelta = _vmEuler.x - lastCamPitch;
+    lastCamYaw = _vmEuler.y;
+    lastCamPitch = _vmEuler.x;
+    sway.x += (THREE.MathUtils.clamp(yawDelta * 22, -1.4, 1.4) - sway.x) * Math.min(1, delta * 9);
+    sway.y += (THREE.MathUtils.clamp(pitchDelta * 22, -1.4, 1.4) - sway.y) * Math.min(1, delta * 9);
+
+    grenadeInHand.position.set(
+        vmBase.x + bobX + sway.x,
+        vmBase.y + bobY + sway.y,
+        vmBase.z
+    );
+    grenadeInHand.rotation.set(0.3 + sway.y * 0.06, -0.3 + sway.x * 0.08, 0.1 + bobX * 0.04);
+}
+const _vmEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+
+// ---------------------------------------------------------------- Input
+const keys = { w: false, a: false, s: false, d: false, shift: false, ctrl: false, space: false };
 
 document.addEventListener('keydown', (e) => {
     const k = e.key.toLowerCase();
     if (k in keys) keys[k] = true;
     if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') keys.shift = true;
-    if (e.code === 'ControlLeft' || e.code === 'ControlRight') keys.ctrl = true;
-    if (e.code === 'Space' && isOnGround) {
-        velocityY = jumpForce;
-        isOnGround = false;
-    }
-    
-    // Pull out smoke grenade
-    if (e.key === '4' || e.key === '4') {
+    if (e.code === 'ControlLeft' || e.code === 'ControlRight') { keys.ctrl = true; e.preventDefault(); }
+    if (e.code === 'Space') { keys.space = true; e.preventDefault(); }
+
+    if (gameState !== 'playing') return;
+    if (k === '4') {
         hasSmoke = !hasSmoke;
-        grenadeInHand.visible = hasSmoke;
-        console.log(hasSmoke ? '💨 Smoke equipped' : '🔫 Weapon equipped');
+        if (grenadeInHand) grenadeInHand.visible = hasSmoke;
     }
+    if (k === 'c') grenades.clearAllSmokes();
+    if (k === 'r') player.spawn(spawnPoint.x, spawnPoint.y, spawnPoint.z);
 });
-
-// Throw system - drži pa pusti
-const throwPower = 40; // Max power
-let isHoldingThrow = false;
-let throwButton = null; // 0 = left, 2 = right
-
-// Mouse down - pripremi bacanje
-document.addEventListener('mousedown', (e) => {
-    if ((e.button === 0 || e.button === 2) && controls.isLocked && grenadeInHand.visible) {
-        isHoldingThrow = true;
-        throwButton = e.button;
-        console.log('🎯 Ready to throw... (Press SPACE for jump throw)');
-    }
-});
-
-// Mouse up - baci smoke kad pustiš
-document.addEventListener('mouseup', (e) => {
-    if (e.button === throwButton && isHoldingThrow && controls.isLocked && grenadeInHand.visible) {
-        isHoldingThrow = false;
-        
-        // Check if space is held for jump throw
-        const isJumpThrow = keys.space;
-        let power = 0;
-        
-        if (throwButton === 0) {
-            // Left click - full power
-            power = throwPower;
-        } else if (throwButton === 2) {
-            // Right click - underhand (60% power)
-            power = throwPower * 0.6;
-        }
-        
-        // Jump throw adds 50% more power
-        if (isJumpThrow) {
-            power *= 1.5;
-            console.log('🚀 JUMP THROW! (+50% power)');
-        }
-        
-        throwSmoke(power);
-        throwButton = null;
-    }
-});
-
-// Prevent context menu on right click
-document.addEventListener('contextmenu', (e) => {
-    if (controls.isLocked) e.preventDefault();
-});
-
-function throwSmoke(power) {
-    if (!hasSmoke) {
-        console.log('❌ No smoke equipped! Press 4 to equip.');
-        return;
-    }
-    
-    const direction = new THREE.Vector3();
-    camera.getWorldDirection(direction);
-    
-    const startPos = camera.position.clone().add(direction.clone().multiplyScalar(0.5));
-    
-    // Check if using Rapier (has physics property) or simple
-    if (smokeSystem.physics) {
-        // Rapier version (3 params)
-        smokeSystem.throwSmoke(startPos, direction, power);
-    } else {
-        // Simple version (5 params with groundY and map for collision)
-        smokeSystem.throwSmoke(startPos, direction, power, mapGroundY, map);
-    }
-    console.log(`💨 Smoke thrown with power ${power.toFixed(1)}!`);
-    
-    grenadeInHand.visible = false;
-    hasSmoke = false;
-    setTimeout(() => {
-        hasSmoke = true;
-        if (grenadeInHand) grenadeInHand.visible = true;
-    }, 500);
-}
 
 document.addEventListener('keyup', (e) => {
     const k = e.key.toLowerCase();
     if (k in keys) keys[k] = false;
     if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') keys.shift = false;
     if (e.code === 'ControlLeft' || e.code === 'ControlRight') keys.ctrl = false;
+    if (e.code === 'Space') keys.space = false;
 });
 
-// Raycaster for collision
-const raycaster = new THREE.Raycaster();
+// Throw: LMB = full, RMB = underhand, LMB+RMB = medium. Release to throw.
+let leftHeld = false, rightHeld = false, bothWereHeld = false;
 
-function checkCollision(pos, dir, distance) {
-    if (!map) return false;
-    raycaster.set(pos, dir);
-    raycaster.far = distance;
-    const hits = raycaster.intersectObject(map, true);
-    return hits.length > 0 && hits[0].distance < distance;
-}
+document.addEventListener('mousedown', (e) => {
+    if (gameState !== 'playing' || isMobile || !controls.isLocked || !hasSmoke) return;
+    if (e.button === 0) leftHeld = true;
+    if (e.button === 2) rightHeld = true;
+    if (leftHeld && rightHeld) bothWereHeld = true;
+});
 
-function checkGround(pos) {
-    if (!map) return { hit: true, groundY: 0 };
-    
-    // Use raycasting to find ground
-    raycaster.set(pos, new THREE.Vector3(0, -1, 0));
-    raycaster.far = 100;
-    const hits = raycaster.intersectObject(map, true);
-    
-    if (hits.length > 0) {
-        return { hit: true, groundY: hits[0].point.y };
+document.addEventListener('mouseup', (e) => {
+    if (e.button !== 0 && e.button !== 2) return;
+    const wasThrowing = leftHeld || rightHeld;
+    const strength = bothWereHeld ? 0.5 : (leftHeld ? 1.0 : 0.0);
+    if (e.button === 0) leftHeld = false;
+    if (e.button === 2) rightHeld = false;
+    if (leftHeld || rightHeld) return;
+
+    if (wasThrowing && gameState === 'playing' && controls.isLocked && hasSmoke) {
+        bothWereHeld = false;
+        throwSmoke(strength);
     }
-    
-    // Fallback to map minimum Y
-    return { hit: true, groundY: mapGroundY };
+});
+
+document.addEventListener('contextmenu', (e) => {
+    if (controls.isLocked || isMobile) e.preventDefault();
+});
+
+const _euler = new THREE.Euler(0, 0, 0, 'YXZ');
+const _fwdH = new THREE.Vector3();
+const _fwdFull = new THREE.Vector3();
+const _right = new THREE.Vector3();
+const _eye = new THREE.Vector3();
+
+function throwSmoke(strength) {
+    if (!hasSmoke) return;
+    _euler.setFromQuaternion(camera.quaternion);
+    const sourcePitchDeg = -THREE.MathUtils.radToDeg(_euler.x); // Source: + is down
+
+    camera.getWorldDirection(_fwdH);
+    _fwdH.y = 0;
+    _fwdH.normalize();
+
+    grenades.throwGrenade(player.getEyePosition(_eye), _fwdH, sourcePitchDeg, strength, player.velocity);
+
+    hasSmoke = false;
+    if (grenadeInHand) grenadeInHand.visible = false;
+    setTimeout(() => {
+        hasSmoke = true;
+        if (grenadeInHand) grenadeInHand.visible = true;
+    }, 700);
 }
 
-function checkLadder(pos) {
-    // Check if player is inside any ladder zone
-    for (const ladderBox of ladderZones) {
-        if (ladderBox.containsPoint(pos)) {
-            return true;
+// Mobile buttons
+function setupMobileButtons() {
+    const press = (id, down, up) => {
+        const el = $(id);
+        el.addEventListener('touchstart', (e) => { down(); e.preventDefault(); }, { passive: false });
+        if (up) {
+            el.addEventListener('touchend', (e) => { up(); e.preventDefault(); }, { passive: false });
+            el.addEventListener('touchcancel', up);
         }
-    }
-    return false;
+    };
+    press('btn-jump', () => { keys.space = true; }, () => { keys.space = false; });
+    press('btn-throw', () => {}, () => { if (gameState === 'playing') throwSmoke(1.0); });
+    press('btn-clear', () => grenades.clearAllSmokes());
+    // scripted jumpthrow: jump, release the nade on the way up
+    press('btn-jt', () => {
+        if (gameState !== 'playing') return;
+        keys.space = true;
+        setTimeout(() => { throwSmoke(1.0); }, 130);
+        setTimeout(() => { keys.space = false; }, 300);
+    });
 }
 
-// Animation
+if (isMobile) {
+    setupMobileLook();
+    setupJoystick();
+    setupMobileButtons();
+} else {
+    renderer.domElement.addEventListener('click', () => {
+        if (gameState === 'playing' && !controls.isLocked) controls.lock();
+    });
+}
+
+// ---------------------------------------------------------------- Debug GUI
+const gui = new GUI({ title: 'Debug' });
+const nadeFolder = gui.addFolder('Grenade Tuning');
+nadeFolder.add(tuning, 'throwSpeed', 400, 900, 5).name('Throw Speed (u/s)');
+nadeFolder.add(tuning, 'nadeGravityScale', 0.2, 1.0, 0.05).name('Gravity Scale');
+nadeFolder.add(tuning, 'elasticity', 0.1, 0.9, 0.05).name('Elasticity');
+nadeFolder.add(tuning, 'velInherit', 0, 2, 0.05).name('Velocity Inherit');
+nadeFolder.close();
+const debugFolder = gui.addFolder('Debug');
+debugFolder.add({ collider: false }, 'collider').name('Show Collider').onChange((v) => {
+    if (mapLoader.colliderVisualizer) mapLoader.colliderVisualizer.visible = v;
+});
+debugFolder.close();
+gui.close();
+if (isMobile) gui.hide();
+
+// ---------------------------------------------------------------- Main loop
+const posDisplay = $('pos-display');
 const clock = new THREE.Clock();
+let accumulator = 0;
+let frameCount = 0;
+const input = { forwardMove: 0, sideMove: 0, jump: false, duck: false, walk: false };
+
+function tickPhysics(dt) {
+    camera.getWorldDirection(_fwdFull);
+    _fwdH.copy(_fwdFull);
+    _fwdH.y = 0;
+    if (_fwdH.lengthSq() > 0) _fwdH.normalize();
+    _right.crossVectors(_fwdH, camera.up);
+
+    if (isMobile) {
+        input.forwardMove = THREE.MathUtils.clamp(stick.fwd * 1.4, -1, 1);
+        input.sideMove = THREE.MathUtils.clamp(stick.side * 1.4, -1, 1);
+    } else {
+        input.forwardMove = (keys.w ? 1 : 0) - (keys.s ? 1 : 0);
+        input.sideMove = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
+    }
+    input.jump = keys.space;
+    input.duck = keys.ctrl;
+    input.walk = keys.shift;
+
+    player.update(dt, input, _fwdH, _right, mapLoader.collider, _fwdFull, mapLoader.ladderZones);
+    grenades.tick(dt);
+}
+
+const playingNow = () => gameState === 'playing' && (isMobile || controls.isLocked);
 
 function animate() {
     requestAnimationFrame(animate);
-    const delta = clock.getDelta();
+    const delta = Math.min(clock.getDelta(), 0.1);
+    frameCount++;
 
-    if (controls.isLocked) {
-        // Speed
-        let speed = moveSpeed;
-        if (keys.shift) speed = 3; // Walk
-        if (keys.ctrl) speed = 2.5; // Crouch
-        
-        // Direction
-        const forward = new THREE.Vector3();
-        const right = new THREE.Vector3();
-        
-        camera.getWorldDirection(forward);
-        forward.y = 0;
-        forward.normalize();
-        
-        right.crossVectors(forward, new THREE.Vector3(0, 1, 0));
-        
-        // Calculate movement
-        const moveDir = new THREE.Vector3();
-        if (keys.w) moveDir.add(forward);
-        if (keys.s) moveDir.sub(forward);
-        if (keys.d) moveDir.add(right);
-        if (keys.a) moveDir.sub(right);
-        
-        const isMoving = moveDir.length() > 0;
-        
-        // Smooth acceleration
-        if (isMoving) {
-            moveDir.normalize();
-            const targetVelocity = moveDir.multiplyScalar(speed);
-            
-            // Accelerate towards target velocity
-            currentVelocity.x += (targetVelocity.x - currentVelocity.x) * acceleration * delta;
-            currentVelocity.z += (targetVelocity.z - currentVelocity.z) * acceleration * delta;
-        } else {
-            // Apply friction when not moving
-            currentVelocity.x *= Math.max(0, 1 - friction * delta);
-            currentVelocity.z *= Math.max(0, 1 - friction * delta);
+    if (playingNow() && mapLoader.collider) {
+        accumulator += delta;
+        while (accumulator >= CS2.TICK) {
+            tickPhysics(CS2.TICK);
+            accumulator -= CS2.TICK;
         }
-        
-        // Apply velocity with collision
-        const moveVec = currentVelocity.clone().multiplyScalar(delta);
-        const oldPos = camera.position.clone();
-        
-        // Try X movement
-        camera.position.x += moveVec.x;
-        if (checkCollision(camera.position, new THREE.Vector3(Math.sign(moveVec.x), 0, 0), 0.5)) {
-            camera.position.x = oldPos.x;
-            currentVelocity.x = 0; // Stop horizontal velocity on collision
-        }
-        
-        // Try Z movement
-        camera.position.z += moveVec.z;
-        if (checkCollision(camera.position, new THREE.Vector3(0, 0, Math.sign(moveVec.z)), 0.5)) {
-            camera.position.z = oldPos.z;
-            currentVelocity.z = 0; // Stop horizontal velocity on collision
-        }
-        
-        // Head bobbing based on actual velocity
-        const actualSpeed = Math.sqrt(currentVelocity.x ** 2 + currentVelocity.z ** 2);
-        if (isMoving && isOnGround && actualSpeed > 0.1) {
-            
-            bobPhase += bobSpeed * delta * actualSpeed;
-            const targetBob = Math.sin(bobPhase) * bobAmount;
-            currentBobAmount += (targetBob - currentBobAmount) * 10 * delta;
-            
-            // Apply bobbing to grenade in hand - forward/backward like walking (slower)
-            if (grenadeInHand && grenadeInHand.visible) {
-                grenadeInHand.position.z = -0.25 + Math.sin(bobPhase) * 0.01; // Forward/backward (slower)
-                grenadeInHand.position.y = -0.12 + Math.abs(Math.sin(bobPhase)) * 0.005; // Slight up/down
-            }
-        } else {
-            // Smooth out bobbing when not moving
-            currentBobAmount *= 0.9;
-            bobPhase = 0;
-        }
-        
-        // Reset grenade position when not moving
-        if (!isMoving && grenadeInHand && grenadeInHand.visible) {
-            grenadeInHand.position.z = -0.25;
-            grenadeInHand.position.y = -0.12;
-        } else {
-            // Smooth out bobbing when not moving
-            currentBobAmount *= 0.9;
-            bobPhase = 0;
-        }
-        
-        // Check if on ladder
-        isOnLadder = checkLadder(camera.position);
-        
-        if (isOnLadder) {
-            // Ladder climbing mode
-            velocityY = 0; // Cancel gravity
-            
-            // Vertical movement on ladder
-            if (keys.w) {
-                camera.position.y += ladderClimbSpeed * delta; // Climb up
-            }
-            if (keys.s) {
-                camera.position.y -= ladderClimbSpeed * delta; // Climb down
-            }
-            
-            // Can jump off ladder
-            if (keys.space) {
-                velocityY = jumpForce;
-                isOnLadder = false;
-            }
-            
-            isOnGround = false; // Not on ground while on ladder
-        } else {
-            // Normal gravity
-            velocityY += gravity * delta;
-            camera.position.y += velocityY * delta;
-        }
-        
-        // Ground check
-        const ground = checkGround(camera.position);
-        const baseHeight = keys.ctrl ? 1.5 : 2.5;
-        
-        if (ground.hit) {
-            const targetY = ground.groundY + baseHeight + currentBobAmount;
-            if (camera.position.y <= targetY) {
-                camera.position.y = targetY;
-                velocityY = 0;
-                isOnGround = true;
-            }
-        } else {
-            isOnGround = false;
-        }
-        
-        // Absolute minimum - don't fall below map ground
-        const absoluteMin = mapGroundY + baseHeight;
-        if (camera.position.y < absoluteMin) {
-            camera.position.y = absoluteMin + currentBobAmount;
-            velocityY = 0;
-            isOnGround = true;
-        }
+        player.getEyePosition(camera.position);
+        updateViewmodel(delta);
     }
 
-    // Update physics if available
-    if (physics && physics.update) {
-        physics.update(delta);
+    grenades.update(delta);
+
+    if (frameCount % 10 === 0 && posDisplay && map) {
+        const hSpeed = Math.hypot(player.velocity.x, player.velocity.z);
+        posDisplay.textContent =
+            `pos ${player.position.x.toFixed(0)} ${player.position.y.toFixed(0)} ${player.position.z.toFixed(0)}  ` +
+            `vel ${hSpeed.toFixed(0)}${player.onLadder ? ' [ladder]' : ''}`;
     }
-    
+
     renderer.render(scene, camera);
 }
 
 animate();
 
+window.__debug = { player, mapLoader, grenades, CS2, tuning, camera, THREE, startGame };
+
 window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
+    applyFov();
     renderer.setSize(window.innerWidth, window.innerHeight);
 });

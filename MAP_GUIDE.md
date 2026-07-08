@@ -1,78 +1,61 @@
-# How to Import CS2 Maps
+# Kako dodati CS2 mapu
 
-## Option 1: Use Pre-converted Maps (Easiest)
+Pipeline: CS2 fajlovi → Source 2 Viewer (glTF export) → `tools/optimize-map.mjs` → app.
 
-1. Search for "CS2 map GLTF" or "CS2 map GLB" online
-2. Download the map file (e.g., `dust2.glb`, `mirage.glb`)
-3. Create a `public/maps/` folder in your project
-4. Place the map file there: `public/maps/dust2.glb`
-5. Update `main.js` line with the correct filename:
-   ```js
-   await mapLoader.loadMap('/maps/dust2.glb');
-   ```
+## 1. Nabavi CS2 map fajl
 
-## Option 2: Convert CS2 Maps Yourself
+**Ako imaš CS2 instaliran (PC):** mapa je u
+`Steam/steamapps/common/Counter-Strike Global Offensive/game/csgo/maps/de_<mapa>.vpk`
 
-### Tools Needed:
-- **GCFScape** - Extract CS2 game files
-- **Blender** - 3D modeling software
-- **Blender Source Tools** - Import VMF/BSP files
+**Ako nemaš:** CS2 je free-to-play, pa se pojedinačni fajl može skinuti sa Steam servera
+(alat je već u `tools/depotdownloader/`):
 
-### Steps:
+```bash
+cd tools
+# uredi filelist.txt (npr. regex:game/csgo/maps/de_dust2\.vpk)
+./depotdownloader/DepotDownloader -app 730 -depot 2347770 -filelist filelist.txt -dir cs2files -qr
+# -qr = login skeniranjem QR koda Steam Mobile aplikacijom
+```
 
-1. **Extract CS2 Map Files**
-   - Install GCFScape
-   - Navigate to CS2 installation: `Steam/steamapps/common/Counter-Strike Global Offensive/game/csgo/`
-   - Open `pak01_dir.vpk` with GCFScape
-   - Navigate to `maps/` folder
-   - Extract the `.bsp` file you want (e.g., `de_dust2.bsp`)
+## 2. Exportuj u glTF (Source 2 Viewer)
 
-2. **Convert BSP to GLTF in Blender**
-   - Install Blender (free)
-   - Install "Blender Source Tools" addon
-   - In Blender: File → Import → Source Engine (.bsp, .mdl, .smd, .qc, .vta, .dmx)
-   - Select your extracted `.bsp` file
-   - Wait for import (can take a while)
-   - Simplify geometry if needed (CS2 maps are very detailed)
-   - File → Export → glTF 2.0 (.glb)
-   - Save as `dust2.glb`
+GUI verzija (Windows) ili CLI (već u `tools/vrf/`):
 
-3. **Optimize the Map**
-   - CS2 maps are huge - you may need to:
-     - Delete unnecessary details
-     - Reduce polygon count
-     - Remove invisible geometry
-     - Bake textures to smaller sizes
+```bash
+./tools/vrf/Source2Viewer-CLI -i de_mirage.vpk -e "maps/de_mirage/world.vmap_c" -o export -d
+```
 
-4. **Place in Project**
-   - Put the `.glb` file in `public/maps/`
-   - Update the map path in `main.js`
+Rezultat: `de_<mapa>_d.glb` + gomila PNG tekstura u istom folderu (300-500MB).
+Sirove exporte drži u `map-sources/` (gitignored, NE u `public/`!).
 
-## Option 3: Use Community Resources
+## 3. Optimizuj za web
 
-Check these sites for pre-made CS2 map exports:
-- Sketchfab (search "CS2" or "CSGO maps")
-- GitHub (search "CS2 map gltf")
-- GameBanana
+```bash
+node tools/optimize-map.mjs map-sources/de_mirage/de_mirage_d.glb public/maps/mirage.glb --texsize 1024 --ratio 1.0
+```
 
-## Quick Test
+- ~430MB → ~35MB: teksture u WebP 1024px, samo color mape, meshopt kompresija,
+  spajanje mesheva po materijalu (3400 → ~370 draw calls)
+- `--ratio` < 1 uključuje simplifikaciju geometrije — OPREZ: ispod ~0.8 zna
+  pojesti zidove/podove (rupe!), zato je default preporuka 1.0
+- Skript automatski briše blocklight/shadowmesh utility geometriju
 
-For now, the project will use a placeholder map. Once you have a real CS2 map:
+## 4. Registruj mapu
 
-1. Place it in `public/maps/your-map.glb`
-2. Update `main.js`:
-   ```js
-   await mapLoader.loadMap('/maps/your-map.glb');
-   ```
-3. Refresh the browser
+U `mapLoader.js` dodaj u `MAPS`:
 
-## Troubleshooting
+```js
+mirage: { path: '/maps/mirage.glb', scale: 1 / 0.0254, zUp: false },
+```
 
-- **Map too big**: Reduce polygon count in Blender
-- **Textures missing**: Make sure textures are embedded in GLB
-- **Map not loading**: Check browser console for errors
-- **Wrong scale**: Adjust scale in Blender before export (CS2 uses Source engine units)
+- VRF exportuje u metrima → `scale: 1/0.0254` vraća u Hammer jedinice (tačno 1:1)
+- Za mape nepoznatog porijekla (Sketchfab ripovi): umjesto `scale` daj
+  `targetSize: <širina mape u HU>` pa kalibriši kroz GUI
+- Baked svjetla iz GLB-a (sunce intenziteta 2000+!) loader automatski uklanja
 
-## Recommended Starting Map
+## Poznata ograničenja
 
-Start with **de_dust2** - it's iconic and relatively simple compared to newer maps.
+- VRF `_physics.glb` sadrži samo entitete (buyzone, propovi), NE world koliziju —
+  zato se collider gradi iz vizuelne geometrije (BVH build ~8s pri učitavanju)
+- Blend materijali (podovi) prikazuju samo prvi layer teksture
+- Vegetacija se renderuje tamno (alpha/tint problem) — kozmetički

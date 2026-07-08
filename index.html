@@ -3,95 +3,240 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CS2 Smoke Practice</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SMOKEPRACTICE — CS2 Smoke Lineup Trainer</title>
+    <meta name="description" content="Practice CS2 smoke lineups in your browser — real map geometry, exact CS2 physics, jumpthrows. No game required. Works on mobile.">
+    <meta name="theme-color" content="#0e1013">
+    <meta property="og:title" content="SMOKEPRACTICE — CS2 Smoke Lineup Trainer">
+    <meta property="og:description" content="Practice CS2 smoke lineups in your browser. Real maps, exact physics, works on mobile.">
+    <meta property="og:type" content="website">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💨</text></svg>">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #0e1013;
+            --panel: #16191e;
+            --panel2: #1d2127;
+            --accent: #f5b83d;
+            --accent2: #e8912d;
+            --text: #e8e6e3;
+            --muted: #8a8f98;
         }
-
+        html, body { height: 100%; overflow: hidden; }
         body {
-            overflow: hidden;
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', -apple-system, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            -webkit-user-select: none; user-select: none;
+            -webkit-tap-highlight-color: transparent;
         }
+        #canvas-container { width: 100vw; height: 100vh; height: 100dvh; }
 
-        #canvas-container {
-            width: 100vw;
-            height: 100vh;
+        /* ---------- overlays ---------- */
+        .overlay {
+            position: fixed; inset: 0; z-index: 20;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: radial-gradient(ellipse at 50% 30%, #1a2029 0%, var(--bg) 70%);
         }
+        .hidden { display: none !important; }
 
+        /* ---------- menu ---------- */
+        #menu { overflow-y: auto; padding: 24px 16px; }
+        .logo {
+            font-size: clamp(34px, 7vw, 64px);
+            font-weight: 900; letter-spacing: 2px;
+            margin-top: auto;
+        }
+        .logo .a { color: var(--accent); }
+        .tagline { color: var(--muted); margin: 6px 0 30px; font-size: clamp(12px, 2.5vw, 15px); letter-spacing: 1px; }
+
+        .maps {
+            display: grid; gap: 14px;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 190px));
+            justify-content: center; width: 100%; max-width: 900px;
+            margin-bottom: 26px;
+        }
+        .map-card {
+            position: relative; border-radius: 12px; overflow: hidden;
+            background: var(--panel); border: 1px solid #262b33;
+            aspect-ratio: 4/3; cursor: pointer;
+            display: flex; flex-direction: column; justify-content: flex-end;
+            transition: transform .15s, border-color .15s;
+        }
+        .map-card .art { position: absolute; inset: 0; }
+        .map-card .name {
+            position: relative; padding: 10px 12px; font-weight: 700; font-size: 15px;
+            background: linear-gradient(transparent, rgba(0,0,0,.75));
+            letter-spacing: .5px;
+        }
+        .map-card.playable:hover { transform: translateY(-3px); border-color: var(--accent); }
+        .map-card.playable .art { background: linear-gradient(160deg, #c9a35c 0%, #8a6b3a 55%, #4c3b22 100%); }
+        .map-card.playable .art::after {
+            content: '▶  PLAY'; position: absolute; inset: 0;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 800; letter-spacing: 2px; color: #fff;
+            background: rgba(0,0,0,.25); opacity: 0; transition: opacity .15s;
+        }
+        .map-card.playable:hover .art::after { opacity: 1; }
+        .map-card.soon { cursor: default; opacity: .55; }
+        .map-card.soon .art { background: linear-gradient(160deg, #3a414c 0%, #23272e 100%); }
+        .badge {
+            position: absolute; top: 10px; right: 10px; z-index: 2;
+            font-size: 10px; font-weight: 800; letter-spacing: 1px;
+            padding: 4px 8px; border-radius: 20px;
+            background: var(--panel2); color: var(--muted); border: 1px solid #2c323b;
+        }
+        .map-card.playable .badge { background: var(--accent); color: #191100; border: none; }
+
+        .spawn-row { display: flex; align-items: center; gap: 10px; margin-bottom: 30px; }
+        .spawn-row .lbl { color: var(--muted); font-size: 13px; letter-spacing: 1px; }
+        .pill {
+            padding: 8px 22px; border-radius: 24px; font-weight: 700; font-size: 14px;
+            background: var(--panel); border: 1px solid #2c323b; color: var(--muted); cursor: pointer;
+        }
+        .pill.active { background: var(--accent); color: #191100; border-color: var(--accent); }
+        .foot { margin-top: auto; color: #565b63; font-size: 11px; letter-spacing: 1px; padding-top: 20px; }
+
+        /* ---------- loading ---------- */
+        #loading .logo { margin-top: 0; }
+        .load-map-name { color: var(--muted); letter-spacing: 3px; margin: 4px 0 26px; font-size: 14px; }
+        .bar-wrap { width: min(420px, 80vw); height: 10px; border-radius: 6px; background: var(--panel2); overflow: hidden; }
+        #bar { height: 100%; width: 0%; border-radius: 6px; background: linear-gradient(90deg, var(--accent2), var(--accent)); transition: width .15s; }
+        #load-status { margin-top: 12px; color: var(--muted); font-size: 13px; }
+
+        /* ---------- resume ---------- */
+        #resume { background: rgba(10, 12, 15, .82); }
+        #resume .btns { display: flex; gap: 12px; margin-top: 22px; }
+        .btn {
+            padding: 13px 34px; border-radius: 10px; border: none; cursor: pointer;
+            font-size: 15px; font-weight: 800; letter-spacing: 1px;
+        }
+        .btn.primary { background: var(--accent); color: #191100; }
+        .btn.ghost { background: var(--panel); color: var(--text); border: 1px solid #2c323b; }
+        #resume h2 { font-size: 26px; letter-spacing: 1px; }
+        .keys-hint { margin-top: 26px; color: var(--muted); font-size: 12.5px; line-height: 1.9; text-align: center; }
+        .keys-hint b { color: var(--text); }
+
+        /* ---------- HUD ---------- */
         #crosshair {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 20px;
-            height: 20px;
-            pointer-events: none;
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 20px; height: 20px; pointer-events: none; z-index: 10;
+        }
+        #crosshair::before, #crosshair::after { content: ''; position: absolute; background: rgba(255,255,255,.85); }
+        #crosshair::before { width: 2px; height: 14px; left: 9px; top: 3px; }
+        #crosshair::after { width: 14px; height: 2px; top: 9px; left: 3px; }
+        #pos-display {
+            position: fixed; left: 10px; bottom: 8px; z-index: 10;
+            font: 11px/1.4 monospace; color: rgba(255,255,255,.55); pointer-events: none;
+        }
+        #hud-hint {
+            position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 10;
+            font-size: 12px; color: rgba(255,255,255,.5); pointer-events: none; letter-spacing: .5px;
         }
 
-        #crosshair::before,
-        #crosshair::after {
-            content: '';
-            position: absolute;
-            background: rgba(255, 255, 255, 0.8);
+        /* ---------- mobile controls ---------- */
+        #mobile-controls { position: fixed; inset: 0; z-index: 15; pointer-events: none; display: none; }
+        body.mobile #mobile-controls { display: block; }
+        body.mobile #hud-hint { display: none; }
+        #stick-zone {
+            position: absolute; left: 0; bottom: 0; width: 45%; height: 55%;
+            pointer-events: auto;
         }
-
-        #crosshair::before {
-            width: 2px;
-            height: 20px;
-            left: 9px;
+        #stick-base {
+            position: absolute; width: 110px; height: 110px; border-radius: 50%;
+            border: 2px solid rgba(255,255,255,.25); background: rgba(255,255,255,.06);
+            display: none;
         }
-
-        #crosshair::after {
-            width: 20px;
-            height: 2px;
-            top: 9px;
+        #stick-thumb {
+            position: absolute; width: 48px; height: 48px; border-radius: 50%;
+            background: rgba(255,255,255,.35); display: none;
         }
-
-        #info {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            color: white;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 10px;
-            border-radius: 5px;
-            font-size: 14px;
+        #look-zone { position: absolute; right: 0; top: 0; width: 55%; height: 100%; pointer-events: auto; }
+        .mbtn {
+            position: absolute; pointer-events: auto; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 800; color: #fff; letter-spacing: .5px;
+            background: rgba(255,255,255,.10); border: 2px solid rgba(255,255,255,.28);
+            touch-action: none;
         }
+        .mbtn:active { background: rgba(245,184,61,.45); }
+        #btn-throw { right: 18px; bottom: 96px; width: 84px; height: 84px; font-size: 13px; background: rgba(245,184,61,.22); border-color: rgba(245,184,61,.6); }
+        #btn-jump { right: 118px; bottom: 26px; width: 64px; height: 64px; font-size: 12px; }
+        #btn-jt { right: 26px; bottom: 200px; width: 60px; height: 60px; font-size: 12px; }
+        #btn-clear { right: 12px; top: 12px; width: 44px; height: 44px; font-size: 11px; border-radius: 10px; }
     </style>
 </head>
 
 <body>
     <div id="canvas-container"></div>
-    <div id="crosshair"></div>
-    <div id="info">
-        <div><strong>CS2 Movement:</strong></div>
-        <div>WASD - Run</div>
-        <div>SHIFT - Walk (slower)</div>
-        <div>CTRL - Crouch</div>
-        <div>SPACE - Jump (or jump off ladder)</div>
-        <div>W/S on ladder - Climb up/down</div>
-        <div>4 - Equip/unequip smoke</div>
-        <div>Left Click - Throw smoke (far)</div>
-        <div>Right Click - Throw smoke (close)</div>
-        <div>Mouse - Look</div>
-        <div style="margin-top: 5px; font-size: 12px; opacity: 0.8;">Click to lock pointer</div>
-        <div style="margin-top: 10px; border-top: 1px solid white; padding-top: 10px;">
-            <div>Map Scale: <span id="scale-value">100</span></div>
-            <input type="range" id="scale-slider" min="0.1" max="1000" value="100" step="0.1" style="width: 200px;">
+
+    <!-- HUD -->
+    <div id="crosshair" class="hidden"></div>
+    <div id="pos-display" class="hidden"></div>
+    <div id="hud-hint" class="hidden">4 smoke &nbsp;•&nbsp; LMB full / RMB lob &nbsp;•&nbsp; SPACE+release = jumpthrow &nbsp;•&nbsp; C clear &nbsp;•&nbsp; R respawn</div>
+
+    <!-- MAIN MENU -->
+    <div id="menu" class="overlay">
+        <div class="logo">SMOKE<span class="a">PRACTICE</span></div>
+        <div class="tagline">CS2 SMOKE LINEUP TRAINER — U BROWSERU, BEZ IGRE</div>
+
+        <div class="maps">
+            <div class="map-card playable" data-map="mirage">
+                <span class="badge">PLAYABLE</span>
+                <div class="art"></div>
+                <div class="name">de_mirage</div>
+            </div>
+            <div class="map-card soon"><span class="badge">SOON</span><div class="art"></div><div class="name">de_dust2</div></div>
+            <div class="map-card soon"><span class="badge">SOON</span><div class="art"></div><div class="name">de_inferno</div></div>
+            <div class="map-card soon"><span class="badge">SOON</span><div class="art"></div><div class="name">de_anubis</div></div>
+            <div class="map-card soon"><span class="badge">SOON</span><div class="art"></div><div class="name">de_ancient</div></div>
+            <div class="map-card soon"><span class="badge">SOON</span><div class="art"></div><div class="name">de_nuke</div></div>
+        </div>
+
+        <div class="spawn-row">
+            <span class="lbl">SPAWN:</span>
+            <button class="pill active" id="spawn-t">T</button>
+            <button class="pill" id="spawn-ct">CT</button>
+        </div>
+
+        <div class="foot">SMOKEPRACTICE.COM</div>
+    </div>
+
+    <!-- LOADING -->
+    <div id="loading" class="overlay hidden">
+        <div class="logo">SMOKE<span class="a">PRACTICE</span></div>
+        <div class="load-map-name" id="load-map-name">DE_MIRAGE</div>
+        <div class="bar-wrap"><div id="bar"></div></div>
+        <div id="load-status">Preuzimanje mape…</div>
+    </div>
+
+    <!-- RESUME / PAUSE -->
+    <div id="resume" class="overlay hidden">
+        <h2>PAUZA</h2>
+        <div class="btns">
+            <button class="btn primary" id="btn-resume">NASTAVI</button>
+            <button class="btn ghost" id="btn-menu">GLAVNI MENI</button>
+        </div>
+        <div class="keys-hint">
+            <b>WASD</b> kretanje &nbsp; <b>SHIFT</b> hod &nbsp; <b>CTRL</b> čučanj &nbsp; <b>SPACE</b> skok<br>
+            <b>LMB</b> pun bacaj &nbsp; <b>RMB</b> kratki &nbsp; <b>LMB+RMB</b> srednji &nbsp; drži <b>SPACE</b> pa pusti klik = <b>jumpthrow</b><br>
+            <b>C</b> obriši smoke-ove &nbsp; <b>R</b> respawn
         </div>
     </div>
-    <script type="importmap">
-    {
-        "imports": {
-            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
-        }
-    }
-    </script>
+
+    <!-- MOBILE CONTROLS -->
+    <div id="mobile-controls">
+        <div id="stick-zone">
+            <div id="stick-base"></div>
+            <div id="stick-thumb"></div>
+        </div>
+        <div id="look-zone"></div>
+        <div class="mbtn" id="btn-throw">THROW</div>
+        <div class="mbtn" id="btn-jump">JUMP</div>
+        <div class="mbtn" id="btn-jt">JT</div>
+        <div class="mbtn" id="btn-clear">C</div>
+    </div>
+
     <script type="module" src="./main.js"></script>
 </body>
 
