@@ -156,6 +156,47 @@
         .btn.primary { background: var(--accent); color: #191100; }
         .btn.ghost { background: var(--panel); color: var(--text); border: 1px solid #2c323b; }
         #resume h2 { font-size: 26px; letter-spacing: 1px; }
+
+        /* ---------- lineups (inside pause) ---------- */
+        #lu-wrap { width: min(460px, 88vw); margin-top: 26px; }
+        .lu-head {
+            display: flex; align-items: center; justify-content: space-between;
+            color: var(--muted); font-size: 12px; letter-spacing: 2px; font-weight: 800;
+            margin-bottom: 8px;
+        }
+        #lu-save {
+            border: 1px solid var(--accent); background: rgba(245,184,61,.12);
+            color: var(--accent); font-weight: 800; font-size: 11px; letter-spacing: 1px;
+            padding: 6px 12px; border-radius: 8px; cursor: pointer;
+        }
+        #lu-save:disabled { opacity: .35; cursor: default; }
+        #lu-list { max-height: 34vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+        .lu-item {
+            display: flex; align-items: center; gap: 8px;
+            background: var(--panel); border: 1px solid #262b33; border-radius: 10px;
+            padding: 9px 12px; font-size: 13.5px;
+        }
+        .lu-item .nm { flex: 1; text-align: left; font-weight: 700; cursor: pointer; }
+        .lu-item .nm:hover { color: var(--accent); }
+        .lu-item .tag {
+            font-size: 9.5px; font-weight: 800; letter-spacing: 1px; color: var(--bg);
+            background: var(--accent); border-radius: 8px; padding: 2px 6px;
+        }
+        .lu-item .ic {
+            cursor: pointer; opacity: .6; font-size: 14px; padding: 2px 4px;
+        }
+        .lu-item .ic:hover { opacity: 1; }
+        .lu-empty { color: #565b63; font-size: 12.5px; padding: 10px 0; }
+
+        /* ---------- toast ---------- */
+        #toast {
+            position: fixed; left: 50%; bottom: 70px; transform: translateX(-50%);
+            z-index: 40; background: var(--panel2); border: 1px solid var(--accent);
+            color: var(--text); font-weight: 700; font-size: 13.5px; letter-spacing: .5px;
+            padding: 11px 22px; border-radius: 12px; pointer-events: none;
+            opacity: 0; transition: opacity .25s;
+        }
+        #toast.show { opacity: 1; }
         .keys-hint { margin-top: 26px; color: var(--muted); font-size: 12.5px; line-height: 1.9; text-align: center; padding: 0 16px; }
         .keys-hint b { color: var(--text); }
         .keys-hint.mobile-hint { display: none; }
@@ -258,6 +299,7 @@
         #btn-lob { right: 106px; bottom: 190px; width: 54px; height: 54px; font-size: 10px; }
         #btn-clear { right: 12px; top: 12px; width: 44px; height: 44px; font-size: 11px; border-radius: 10px; }
         #btn-fly { right: 66px; top: 12px; width: 44px; height: 44px; font-size: 10px; border-radius: 10px; }
+        #btn-savelu { right: 120px; top: 12px; width: 44px; height: 44px; font-size: 16px; border-radius: 10px; }
         .mbtn.act { background: rgba(245,184,61,.5); border-color: var(--accent); }
     </style>
 </head>
@@ -268,7 +310,7 @@
     <!-- HUD -->
     <div id="crosshair" class="hidden"></div>
     <div id="pos-display" class="hidden"></div>
-    <div id="hud-hint" class="hidden">SPACE+release = jumpthrow &nbsp;•&nbsp; V noclip &nbsp;•&nbsp; C clear smokes+trails &nbsp;•&nbsp; R respawn</div>
+    <div id="hud-hint" class="hidden">F = jumpthrow &nbsp;•&nbsp; V noclip &nbsp;•&nbsp; C clear smokes+trails &nbsp;•&nbsp; R respawn</div>
 
     <div id="throw-help" class="hidden">
         <div class="th-row" id="th-full"><span class="mouse"><span class="mb l on"></span><span class="mb r"></span></span> FULL THROW</div>
@@ -332,9 +374,17 @@
             <button class="btn primary" id="btn-resume">RESUME</button>
             <button class="btn ghost" id="btn-menu">MAIN MENU</button>
         </div>
+
+        <div id="lu-wrap">
+            <div class="lu-head">
+                <span>📌 SAVED LINEUPS</span>
+                <button id="lu-save">+ SAVE LAST THROW</button>
+            </div>
+            <div id="lu-list"></div>
+        </div>
         <div class="keys-hint desktop-hint">
             <b>WASD</b> move &nbsp; <b>SHIFT</b> walk &nbsp; <b>CTRL</b> crouch &nbsp; <b>SPACE</b> jump<br>
-            <b>LMB</b> full throw &nbsp; <b>RMB</b> lob &nbsp; <b>LMB+RMB</b> medium &nbsp; hold <b>SPACE</b>, release click = <b>jumpthrow</b><br>
+            <b>LMB</b> full throw &nbsp; <b>RMB</b> lob &nbsp; <b>LMB+RMB</b> medium &nbsp; <b>F</b> = <b>jumpthrow</b> (or hold <b>SPACE</b>, release click)<br>
             thrown nades leave a <b>trail</b> &nbsp; <b>V</b> noclip (fly) &nbsp; <b>C</b> clear smokes+trails &nbsp; <b>R</b> respawn
         </div>
         <div class="keys-hint mobile-hint">
@@ -360,8 +410,11 @@
         <div class="mbtn" id="btn-jt">JT</div>
         <div class="mbtn" id="btn-clear">C</div>
         <div class="mbtn" id="btn-fly">FLY</div>
+        <div class="mbtn" id="btn-savelu">📌</div>
         <div class="mbtn" id="btn-pause">☰</div>
     </div>
+
+    <div id="toast"></div>
 
     <!-- ROTATE TO LANDSCAPE -->
     <div id="rotate-overlay">
