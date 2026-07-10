@@ -15,6 +15,7 @@ let gameState = 'menu'; // menu | loading | playing | paused
 let spawnChoice = 'T';
 let mapDef = null;
 let map = null;
+let currentMapKey = null;
 const spawnPoint = new THREE.Vector3(0, 200, 0);
 
 const $ = (id) => document.getElementById(id);
@@ -221,6 +222,7 @@ async function lockLandscape() {
 async function startGame(mapKey) {
     if (isMobile) lockLandscape();
     mapDef = MAPS[mapKey];
+    currentMapKey = mapKey;
     gameState = 'loading';
     hide('menu');
     $('load-map-name').textContent = (mapDef.name || mapKey).toUpperCase();
@@ -283,6 +285,7 @@ function pauseGame() {
 
 function showResume(title) {
     document.querySelector('#resume h2').textContent = title;
+    renderLineups();
     show('resume');
 }
 
@@ -398,9 +401,11 @@ document.addEventListener('keydown', (e) => {
         hasSmoke = !hasSmoke;
         if (grenadeInHand) grenadeInHand.visible = hasSmoke;
     }
+    if (k === 'f') scriptedJumpthrow();
     if (k === 'c') grenades.clearAllSmokes();
     if (k === 'r') player.spawn(spawnPoint.x, spawnPoint.y, spawnPoint.z);
     if (k === 'v') player.noclip = !player.noclip;
+    if (k === 'l') saveLastThrow();
 });
 
 document.addEventListener('keyup', (e) => {
@@ -465,6 +470,19 @@ function throwSmoke(strength) {
     _fwdH.y = 0;
     _fwdH.normalize();
 
+    // remember the stance for "save lineup"
+    lastThrow = {
+        map: currentMapKey,
+        x: +player.position.x.toFixed(1),
+        y: +player.position.y.toFixed(1),
+        z: +player.position.z.toFixed(1),
+        yaw: +_euler.y.toFixed(4),
+        pitch: +_euler.x.toFixed(4),
+        s: strength,
+        jt: player.onGround ? 0 : 1,
+    };
+    $('lu-save').disabled = false;
+
     grenades.throwGrenade(player.getEyePosition(_eye), _fwdH, sourcePitchDeg, strength, player.velocity);
 
     hasSmoke = false;
@@ -473,6 +491,14 @@ function throwSmoke(strength) {
         hasSmoke = true;
         if (grenadeInHand) grenadeInHand.visible = true;
     }, 700);
+}
+
+// Scripted jumpthrow: jump, release the nade on the way up (like a CS2 bind)
+function scriptedJumpthrow(strength = 1.0) {
+    if (gameState !== 'playing' || !hasSmoke) return;
+    keys.space = true;
+    setTimeout(() => { throwSmoke(strength); }, 130);
+    setTimeout(() => { keys.space = false; }, 300);
 }
 
 // Mobile buttons
@@ -492,13 +518,8 @@ function setupMobileButtons() {
     press('btn-clear', () => grenades.clearAllSmokes());
     press('btn-pause', () => { if (gameState === 'playing') pauseGame(); });
     press('btn-fly', () => { player.noclip = !player.noclip; $('btn-fly').classList.toggle('act', player.noclip); });
-    // scripted jumpthrow: jump, release the nade on the way up
-    press('btn-jt', () => {
-        if (gameState !== 'playing') return;
-        keys.space = true;
-        setTimeout(() => { throwSmoke(1.0); }, 130);
-        setTimeout(() => { keys.space = false; }, 300);
-    });
+    press('btn-savelu', () => saveLastThrow());
+    press('btn-jt', () => scriptedJumpthrow());
 }
 
 if (isMobile) {
@@ -519,6 +540,106 @@ if (isMobile) {
         if (gameState === 'playing' && !controls.isLocked) controls.lock();
     });
 }
+
+// ---------------------------------------------------------------- Lineups
+// Saved as {id, name, map, x,y,z (feet), yaw, pitch (camera), s (strength), jt}
+let lastThrow = null;
+let toastTimer = 0;
+
+function toast(msg) {
+    const el = $('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+const loadLineups = () => {
+    try { return JSON.parse(localStorage.getItem('sp-lineups') || '[]'); }
+    catch { return []; }
+};
+const storeLineups = (list) => localStorage.setItem('sp-lineups', JSON.stringify(list.slice(0, 50)));
+
+function saveLastThrow() {
+    if (!lastThrow) { toast('Throw a smoke first'); return; }
+    const list = loadLineups();
+    const lu = { id: Math.random().toString(36).slice(2, 9), name: `Lineup ${list.length + 1}`, ...lastThrow };
+    list.unshift(lu);
+    storeLineups(list);
+    renderLineups();
+    toast('Lineup saved 📌 (rename it in the pause menu)');
+}
+
+function lineupLink(lu) {
+    const q = [lu.map, lu.x, lu.y, lu.z, lu.yaw, lu.pitch, lu.s, lu.jt].join(',');
+    return `${location.origin}${location.pathname}#lu=${q}&n=${encodeURIComponent(lu.name)}`;
+}
+
+function applyLineup(lu) {
+    player.spawn(lu.x, lu.y, lu.z);
+    camera.quaternion.setFromEuler(new THREE.Euler(lu.pitch, lu.yaw, 0, 'YXZ'));
+    player.getEyePosition(camera.position);
+    const strengthName = lu.s === 1 ? 'FULL (LMB)' : lu.s === 0.5 ? 'MEDIUM (LMB+RMB)' : 'LOB (RMB)';
+    toast(`${lu.name} — throw: ${strengthName}${lu.jt ? ' + JUMPTHROW' : ''}`);
+}
+
+function renderLineups() {
+    const listEl = $('lu-list');
+    const list = loadLineups().filter(l => l.map === currentMapKey);
+    listEl.innerHTML = '';
+    if (!list.length) {
+        listEl.innerHTML = '<div class="lu-empty">No saved lineups on this map yet — throw a smoke, then hit SAVE (or press L right after a throw).</div>';
+        return;
+    }
+    for (const lu of list) {
+        const row = document.createElement('div');
+        row.className = 'lu-item';
+        const badges = (lu.jt ? '<span class="tag">JT</span>' : '') +
+            (lu.s === 0.5 ? '<span class="tag">MED</span>' : lu.s === 0 ? '<span class="tag">LOB</span>' : '');
+        row.innerHTML = `<span class="nm">${lu.name}</span>${badges}` +
+            `<span class="ic" data-a="share" title="Copy share link">🔗</span>` +
+            `<span class="ic" data-a="rename" title="Rename">✎</span>` +
+            `<span class="ic" data-a="del" title="Delete">✕</span>`;
+        row.querySelector('.nm').addEventListener('click', () => {
+            applyLineup(lu);
+            resumeGame();
+        });
+        row.querySelector('[data-a="share"]').addEventListener('click', () => {
+            navigator.clipboard.writeText(lineupLink(lu)).then(
+                () => toast('Share link copied 🔗'),
+                () => toast(lineupLink(lu)));
+        });
+        row.querySelector('[data-a="rename"]').addEventListener('click', () => {
+            const name = prompt('Lineup name:', lu.name);
+            if (!name) return;
+            const all = loadLineups();
+            const t = all.find(l => l.id === lu.id);
+            if (t) { t.name = name.slice(0, 40); storeLineups(all); renderLineups(); }
+        });
+        row.querySelector('[data-a="del"]').addEventListener('click', () => {
+            storeLineups(loadLineups().filter(l => l.id !== lu.id));
+            renderLineups();
+        });
+        listEl.appendChild(row);
+    }
+}
+
+$('lu-save').addEventListener('click', saveLastThrow);
+$('lu-save').disabled = true;
+
+// Shared lineup in the URL: #lu=map,x,y,z,yaw,pitch,s,jt&n=name
+let pendingLineup = null;
+(function parseSharedLineup() {
+    const m = location.hash.match(/lu=([^&]+)/);
+    if (!m) return;
+    const p = m[1].split(',');
+    if (p.length < 8 || !MAPS[p[0]]) return;
+    const nm = location.hash.match(/n=([^&]+)/);
+    pendingLineup = {
+        map: p[0], name: nm ? decodeURIComponent(nm[1]) : 'Shared lineup',
+        x: +p[1], y: +p[2], z: +p[3], yaw: +p[4], pitch: +p[5], s: +p[6], jt: +p[7],
+    };
+})();
 
 // ---------------------------------------------------------------- Debug GUI
 const gui = new GUI({ title: 'Debug' });

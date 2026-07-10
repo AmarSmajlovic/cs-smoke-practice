@@ -70,6 +70,7 @@ export class MapLoader {
         if (lights.length) console.log(`Removed ${lights.length} baked light(s) from map`);
 
         this.fixSkinnedMeshes(visual);
+        this.stripEffectMeshes(visual);
         this.optimizeMaterials(visual);
 
         const mapRoot = new THREE.Group();
@@ -183,6 +184,28 @@ export class MapLoader {
             }
         });
         console.log(`Special meshes: ${this.ladderZones.length} ladder zones, ${this.breakables.length} breakables`);
+    }
+
+    // Remove particle/effect meshes the VRF export turned into solid geometry
+    // (e.g. Mirage's ambient dust volume "effects/smoke/dust_002" becomes a
+    // giant grey wall over the sky that also blocks grenades). Must run BEFORE
+    // optimizeMaterials (which drops the vmat path) and buildCollider.
+    stripEffectMeshes(rootObj) {
+        const isEffectMat = (mat) => {
+            const vmat = (mat?.userData?.vmat?.Name || '').toLowerCase();
+            return /^materials\/(effects\/smoke|particle)\//.test(vmat);
+        };
+        const toRemove = [];
+        rootObj.traverse((child) => {
+            if (!child.isMesh) return;
+            const mats = Array.isArray(child.material) ? child.material : [child.material];
+            if (mats.length && mats.every(isEffectMat)) toRemove.push(child);
+        });
+        for (const mesh of toRemove) {
+            console.log(`Stripped effect mesh: ${mesh.name}`);
+            mesh.parent.remove(mesh);
+        }
+        if (toRemove.length) console.log(`Removed ${toRemove.length} effect mesh(es) from map`);
     }
 
     // Replace SkinnedMesh without valid skeleton (common in ripped exports)
