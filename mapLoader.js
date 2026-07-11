@@ -248,7 +248,10 @@ export class MapLoader {
                     optimalMat.transparent = false;
                     optimalMat.alphaTest = 0.5;
                 }
-                if (mat.vertexColors) optimalMat.vertexColors = true;
+                // Source 2 foliage shader stores wind-sway data in COLOR_0,
+                // not albedo tint — using it as color renders tarps/plants black
+                const shader = mat.userData?.vmat?.ShaderName || '';
+                if (mat.vertexColors && shader !== 'csgo_foliage.vfx') optimalMat.vertexColors = true;
                 return optimalMat;
             });
             child.material = Array.isArray(child.material) ? newMaterials : newMaterials[0];

@@ -10,6 +10,7 @@ const _triPoint = new THREE.Vector3();
 const _capsulePoint = new THREE.Vector3();
 const _wishdir = new THREE.Vector3();
 const _delta = new THREE.Vector3();
+const STEP_HEIGHT = 18; // sv_stepsize — max ledge the flat hull bottom climbs
 
 // Source-style player: friction -> accelerate -> gravity -> move -> capsule depenetration.
 // All units are Hammer units; runs at a fixed tick.
@@ -246,6 +247,23 @@ export class Player {
                 if (distance < radius) {
                     const depth = radius - distance;
                     _delta.subVectors(_capsulePoint, _triPoint).normalize();
+                    // CS2 hull has a flat bottom: grounded players step up at
+                    // most 18u (sv_stepsize); airborne players can only be
+                    // lifted by as much as they sank through a surface this
+                    // tick (landing penetration). Anything higher is an edge
+                    // graze on the capsule's round bottom — the "mantle" that
+                    // lets you climb boxes the game only allows with a boost —
+                    // so push out horizontally instead.
+                    const feetY = _tempSegment.start.y - radius;
+                    const maxLift = this.onGround
+                        ? STEP_HEIGHT
+                        : Math.max(0, -this.velocity.y) * dt * 1.25 + 1.5;
+                    if (_delta.y > 0 && _triPoint.y > feetY + maxLift) {
+                        _delta.y = 0;
+                        const len = _delta.length();
+                        if (len < 1e-6) return; // purely vertical lift: ignore
+                        _delta.multiplyScalar(1 / len);
+                    }
                     _tempSegment.start.addScaledVector(_delta, depth);
                     _tempSegment.end.addScaledVector(_delta, depth);
                 }
