@@ -708,8 +708,19 @@ function animate() {
 
     if (frameCount % 10 === 0 && posDisplay && map) {
         const hSpeed = Math.hypot(player.velocity.x, player.velocity.z);
+        // view angles: pitch + is down (CS2 setang convention), yaw in degrees
+        _euler.setFromQuaternion(camera.quaternion);
+        const pitch = -THREE.MathUtils.radToDeg(_euler.x);
+        const yaw = THREE.MathUtils.radToDeg(_euler.y);
+        // world point under the crosshair (for lineup screenshots/calibration)
+        camera.getWorldDirection(_fwdFull);
+        const aimHit = mapLoader.raycast(camera.position, _fwdFull, 20000);
+        const aim = aimHit
+            ? `aim ${aimHit.point.x.toFixed(0)} ${aimHit.point.y.toFixed(0)} ${aimHit.point.z.toFixed(0)}`
+            : 'aim sky';
         posDisplay.textContent =
             `pos ${player.position.x.toFixed(0)} ${player.position.y.toFixed(0)} ${player.position.z.toFixed(0)}  ` +
+            `ang ${pitch.toFixed(1)} ${yaw.toFixed(1)}  ${aim}  ` +
             `vel ${hSpeed.toFixed(0)}${player.onLadder ? ' [ladder]' : ''}${player.noclip ? ' [noclip]' : ''}`;
     }
 
