@@ -5,6 +5,8 @@ import { CS2, tuning } from './physicsConfig.js';
 const _dir = new THREE.Vector3();
 const _move = new THREE.Vector3();
 const _normal = new THREE.Vector3();
+const _bounceN = new THREE.Vector3();
+const _bounceT = new THREE.Vector3();
 const _end = new THREE.Vector3();
 const _segBox = new THREE.Box3();
 
@@ -102,7 +104,9 @@ export class GrenadeSystem {
         const pos = nade.position;
         const vel = nade.velocity;
         nade.age += dt;
-        if (nade.age > 20) return false; // safety net
+        if (nade.age > 10) return false; // CS2 cap: smoke pops ~10s after the
+                                         // throw even if still moving (the
+                                         // cs2utils window lineup: 9.999s)
 
         // Source half-gravity integration (half before the move, half at the
         // end of the step) — plain Euler flies measurably lower and shorter
@@ -150,10 +154,15 @@ export class GrenadeSystem {
                     }
                 }
 
-                // Reflect and lose energy (Source: clip w/ overbounce 2, then * elasticity)
+                // Bounce with split restitution: the normal (out-of-surface)
+                // component uses a lower coefficient than the tangential one —
+                // CS2 nades skim low after grazing bounces instead of popping
+                // up (calibrated on the cs2utils window smoke trail)
                 const into = vel.dot(_normal);
-                vel.addScaledVector(_normal, -2 * into);
-                vel.multiplyScalar(tuning.elasticity);
+                _bounceN.copy(_normal).multiplyScalar(into);   // normal part
+                _bounceT.copy(vel).sub(_bounceN);              // tangential part
+                vel.copy(_bounceT).multiplyScalar(tuning.elasticity)
+                    .addScaledVector(_normal, -into * tuning.elasticityVert);
 
                 const isFloor = _normal.y > 0.7;
                 const speed = vel.length();
