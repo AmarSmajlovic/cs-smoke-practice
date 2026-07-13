@@ -28,7 +28,11 @@ export const CS2 = {
     // Grenade projectile
     nadeBaseThrowSpeed: 675,    // 750 (weapon ThrowVelocity) * 0.9
     nadeGravityScale: 0.4,      // grenade projectiles use 0.4 * sv_gravity
-    nadeElasticity: 0.45,       // bounce energy retained
+    nadeElasticity: 0.45,       // bounce: tangential (along-surface) speed kept
+    nadeElasticityVert: 0.28,   // bounce: normal (out of surface) restitution —
+                                // lower than tangential; calibrated against the
+                                // cs2utils window smoke trail (low hop over the
+                                // box after the ledge bounce)
     nadeVelInherit: 1.0,        // player velocity added to the throw. CSGO used
                                 // 1.25; CS2 nerfed it — calibrated against the
                                 // cs2utils window jumpthrow (first touch lands
@@ -47,5 +51,6 @@ export const tuning = {
     throwSpeed: CS2.nadeBaseThrowSpeed,
     nadeGravityScale: CS2.nadeGravityScale,
     elasticity: CS2.nadeElasticity,
+    elasticityVert: CS2.nadeElasticityVert,
     velInherit: CS2.nadeVelInherit,
 };
