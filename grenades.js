@@ -104,8 +104,10 @@ export class GrenadeSystem {
         nade.age += dt;
         if (nade.age > 20) return false; // safety net
 
+        // Source half-gravity integration (half before the move, half at the
+        // end of the step) — plain Euler flies measurably lower and shorter
         if (!nade.rolling) {
-            vel.y -= CS2.gravity * tuning.nadeGravityScale * dt;
+            vel.y -= CS2.gravity * tuning.nadeGravityScale * dt * 0.5;
         }
 
         _move.copy(vel).multiplyScalar(dt);
@@ -126,13 +128,27 @@ export class GrenadeSystem {
                 }
             }
             _dir.copy(_move).divideScalar(dist);
-            const hit = this.mapLoader.raycast(pos, _dir, dist + CS2.nadeRadius);
+            const hit = this.mapLoader.raycastNade(pos, _dir, dist + CS2.nadeRadius);
             if (hit) {
                 // Land just off the surface
                 pos.addScaledVector(_dir, Math.max(hit.distance - CS2.nadeRadius, 0));
 
                 _normal.copy(hit.face.normal);
                 if (_normal.dot(_dir) > 0) _normal.negate(); // DoubleSide faces
+
+                // CS2 grenades bounce off simple axis-aligned clip hulls; our
+                // collider is the visual mesh whose decorative bevels/trims
+                // deflect bounces sideways. Snap near-axis normals (<~12°)
+                // to the axis — real ramps and slanted walls stay untouched.
+                {
+                    const ax = Math.abs(_normal.x), ay = Math.abs(_normal.y), az = Math.abs(_normal.z);
+                    const m = Math.max(ax, ay, az);
+                    if (m > 0.978) {
+                        if (m === ax) _normal.set(Math.sign(_normal.x), 0, 0);
+                        else if (m === ay) _normal.set(0, Math.sign(_normal.y), 0);
+                        else _normal.set(0, 0, Math.sign(_normal.z));
+                    }
+                }
 
                 // Reflect and lose energy (Source: clip w/ overbounce 2, then * elasticity)
                 const into = vel.dot(_normal);
@@ -153,7 +169,7 @@ export class GrenadeSystem {
                 pos.add(_move);
                 if (nade.rolling) {
                     // Still on the ground? If not, resume flying (rolled off an edge)
-                    const ground = this.mapLoader.raycast(pos, _down, CS2.nadeRadius + 4);
+                    const ground = this.mapLoader.raycastNade(pos, _down, CS2.nadeRadius + 4);
                     if (ground) {
                         pos.y = ground.point.y + CS2.nadeRadius;
                     } else {
@@ -171,8 +187,9 @@ export class GrenadeSystem {
             const s = newSpeed / speed;
             vel.x *= s;
             vel.z *= s;
-        } else if (nade.mesh) {
-            nade.mesh.rotateX(-0.15); // tumble in flight
+        } else {
+            vel.y -= CS2.gravity * tuning.nadeGravityScale * dt * 0.5; // second half-step
+            if (nade.mesh) nade.mesh.rotateX(-0.15); // tumble in flight
         }
 
         return true;

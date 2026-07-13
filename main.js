@@ -401,8 +401,12 @@ document.addEventListener('keydown', (e) => {
         hasSmoke = !hasSmoke;
         if (grenadeInHand) grenadeInHand.visible = hasSmoke;
     }
-    if (k === 'f') scriptedJumpthrow();
-    if (k === 'c') grenades.clearAllSmokes();
+    // use e.code: on macOS Option+F yields e.key "ƒ", not "f"
+    if (e.code === 'KeyF') scriptedJumpthrow('bind', e);
+    if (e.code === 'KeyG') scriptedJumpthrow('peak', e);
+    if (e.code === 'KeyM') placeAimTarget();
+    if (e.code === 'KeyN') solveAimFromHere(e.shiftKey ? 0.5 : e.altKey ? 0.0 : 1.0);
+    if (k === 'c') { grenades.clearAllSmokes(); clearAimHelper(); }
     if (k === 'r') player.spawn(spawnPoint.x, spawnPoint.y, spawnPoint.z);
     if (k === 'v') player.noclip = !player.noclip;
     if (k === 'l') saveLastThrow();
@@ -443,7 +447,10 @@ document.addEventListener('mouseup', (e) => {
     updateThrowHelp();
     if (leftHeld || rightHeld) return; // wait until every button is released
 
-    const strength = gestureL && gestureR ? 0.5 : gestureL ? 1.0 : gestureR ? 0.0 : null;
+    let strength = gestureL && gestureR ? 0.5 : gestureL ? 1.0 : gestureR ? 0.0 : null;
+    // trackpad-friendly modifiers on a plain left click
+    if (strength === 1.0 && e.shiftKey) strength = 0.5;
+    else if (strength === 1.0 && e.altKey) strength = 0.0;
     gestureL = gestureR = false;
 
     if (strength !== null && gameState === 'playing' && controls.isLocked && hasSmoke) {
@@ -493,12 +500,224 @@ function throwSmoke(strength) {
     }, 700);
 }
 
-// Scripted jumpthrow: jump, release the nade on the way up (like a CS2 bind)
-function scriptedJumpthrow(strength = 1.0) {
-    if (gameState !== 'playing' || !hasSmoke) return;
+// Scripted jumpthrows, driven by the actual physics state instead of timers.
+//  mode 'bind': release on the first airborne tick — the classic jumpthrow
+//               bind; matches cs2utils.com lineups (verified: window smoke
+//               lands inside window room with this timing)
+//  mode 'peak': release at the top of the jump — "jump, throw at the highest
+//               point" lineups (shorter, higher-clearance arcs)
+// Throw strength: SHIFT = medium, ALT = lob (trackpad-friendly), or the
+// mouse buttons held while pressing the key (both = medium, RMB = lob).
+// The release itself happens inside tickPhysics (see below) so the timing
+// is deterministic in ticks, like a CS2 bind — not frame-rate dependent.
+let pendingJT = null;
+function scriptedJumpthrow(mode = 'bind', e = null) {
+    if (gameState !== 'playing' || !hasSmoke || pendingJT) return;
+    const strength = (e?.shiftKey || (leftHeld && rightHeld)) ? 0.5
+        : (e?.altKey || rightHeld) ? 0.0
+        : 1.0;
+    gestureL = gestureR = false; // consume the gesture: no double throw on mouseup
     keys.space = true;
-    setTimeout(() => { throwSmoke(strength); }, 130);
-    setTimeout(() => { keys.space = false; }, 300);
+    pendingJT = { mode, strength, airTicks: 0, totalTicks: 0 };
+}
+
+// Called once per 64Hz physics tick.
+function tickScriptedJumpthrow() {
+    if (!pendingJT) return;
+    const jt = pendingJT;
+    jt.totalTicks++;
+    if (jt.totalTicks > 60) { // never left the ground: bail out
+        pendingJT = null;
+        keys.space = false;
+        return;
+    }
+    if (player.onGround) return;
+    jt.airTicks++;
+    const ready = jt.mode === 'peak'
+        ? player.velocity.y <= 20
+        : jt.airTicks >= 1;
+    if (ready) {
+        throwSmoke(jt.strength);
+        pendingJT = null;
+        setTimeout(() => { keys.space = false; }, 120);
+    }
+}
+
+// ------------------------------------------------------- setpos import
+// Paste a CS2 console string (getpos / cs2utils.com) into the pause menu to
+// teleport to the exact spot with the exact view angles. Coordinate mapping
+// (verified against the cs2utils window lineup): our x = game y,
+// our z = game x, height identical; getpos reports the EYE, so feet = z - 64.
+const _downVec = new THREE.Vector3(0, -1, 0);
+function applySetposString(str) {
+    const m = str.match(/setpos\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)(?:.*?setang\s+(-?[\d.]+)\s+(-?[\d.]+))?/s);
+    if (!m || !map) return false;
+    const gy = +m[2], gx = +m[1], gz = +m[3];
+    const ox = gy, oz = gx;
+    let oy = gz - CS2.eyeStand;
+    // snap the feet to the floor when it's within reach (getpos vs setpos quirk)
+    const hit = mapLoader.raycast(new THREE.Vector3(ox, oy + 40, oz), _downVec, 200);
+    if (hit && Math.abs(hit.point.y - oy) < 80) oy = hit.point.y + 1;
+    player.position.set(ox, oy, oz);
+    player.velocity.set(0, 0, 0);
+    if (m[4] !== undefined) {
+        const gPitch = +m[4];
+        const gYaw = +m[5] * Math.PI / 180;
+        const oYaw = Math.atan2(-Math.sin(gYaw), -Math.cos(gYaw));
+        camera.rotation.order = 'YXZ';
+        camera.rotation.set(-gPitch * Math.PI / 180, oYaw, 0);
+    }
+    player.getEyePosition(camera.position);
+    return true;
+}
+
+{
+    const input = $('setpos-input');
+    const go = () => {
+        if (applySetposString(input.value)) {
+            input.value = '';
+            toast('📍 Teleported to the lineup spot');
+            resumeGame();
+        } else {
+            toast('Could not parse — expected "setpos x y z; setang p y r"');
+        }
+    };
+    $('setpos-go').addEventListener('click', go);
+    // keep WASD state clean while typing in the input
+    input.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') go();
+    });
+    input.addEventListener('keyup', (e) => e.stopPropagation());
+}
+
+// ---------------------------------------------------------------- Aim helper
+// M with the crosshair on a spot = "the smoke should land HERE". The solver
+// finds the exact pitch/yaw for the current throw type (SHIFT/ALT modifiers
+// pick medium/lob) and shows: a ring on the target, a green dot to put the
+// crosshair on, and the predicted trajectory. C clears it.
+const _simPos = new THREE.Vector3();
+const _simVel = new THREE.Vector3();
+const _simMove = new THREE.Vector3();
+const _simDir = new THREE.Vector3();
+const _zeroVel = new THREE.Vector3();
+
+// Integrate one throw exactly like stepProjectile's flight phase; returns the
+// first collider hit (or null) and optionally collects points for the preview
+function simulateFlight(eye, fwdH, pitchDeg, strength, outPoints = null) {
+    grenades.computeThrow(eye, fwdH, pitchDeg, strength, _zeroVel, _simPos, _simVel);
+    const dt = CS2.TICK, g = CS2.gravity * tuning.nadeGravityScale;
+    if (outPoints) outPoints.push(_simPos.clone());
+    for (let i = 0; i < 64 * 12; i++) {
+        _simVel.y -= g * dt * 0.5;
+        _simMove.copy(_simVel).multiplyScalar(dt);
+        const dist = _simMove.length();
+        if (dist < 1e-6) break;
+        _simDir.copy(_simMove).divideScalar(dist);
+        const hit = mapLoader.raycastNade(_simPos, _simDir, dist + CS2.nadeRadius);
+        if (hit) {
+            _simPos.copy(hit.point);
+            if (outPoints) outPoints.push(_simPos.clone());
+            return _simPos;
+        }
+        _simPos.add(_simMove);
+        _simVel.y -= g * dt * 0.5;
+        if (outPoints && i % 3 === 0) outPoints.push(_simPos.clone());
+    }
+    return null;
+}
+
+// Find pitch/yaw so the first touch lands on target (standing throw)
+function solveAim(target, strength) {
+    const eye = player.getEyePosition(new THREE.Vector3());
+    const yawRad = Math.atan2(-(target.x - eye.x), -(target.z - eye.z));
+    const fwdH = new THREE.Vector3(-Math.sin(yawRad), 0, -Math.cos(yawRad));
+    let best = null;
+    const tryPitch = (p) => {
+        const end = simulateFlight(eye, fwdH, p, strength);
+        if (!end) return;
+        const err = end.distanceTo(target);
+        if (!best || err < best.err) best = { pitch: p, err };
+    };
+    for (let p = 40; p >= -88; p -= 1) tryPitch(p);
+    if (!best) return null;
+    const coarse = best.pitch;
+    for (let p = coarse - 0.9; p <= coarse + 0.9; p += 0.1) tryPitch(p);
+    return { pitch: best.pitch, yawDeg: THREE.MathUtils.radToDeg(yawRad), err: best.err, eye, fwdH };
+}
+
+const lineupHelper = { ring: null, ghost: null, line: null, target: null };
+
+function clearAimHelper(keepTarget = false) {
+    const kinds = keepTarget ? ['ghost', 'line'] : ['ring', 'ghost', 'line'];
+    for (const k of kinds) {
+        if (lineupHelper[k]) {
+            scene.remove(lineupHelper[k]);
+            lineupHelper[k].geometry?.dispose();
+            lineupHelper[k].material?.dispose();
+            lineupHelper[k] = null;
+        }
+    }
+    if (!keepTarget) lineupHelper.target = null;
+}
+
+// M: mark "the smoke should land HERE" (stand there / look at the spot)
+function placeAimTarget() {
+    camera.getWorldDirection(_fwdFull);
+    const hit = mapLoader.raycast(camera.position, _fwdFull, 20000);
+    if (!hit) { toast('Aim at the landing spot first, then press M'); return; }
+    clearAimHelper();
+    lineupHelper.target = hit.point.clone();
+
+    const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(14, 1.6, 8, 40),
+        new THREE.MeshBasicMaterial({ color: 0xff4444, depthTest: false, transparent: true, opacity: 0.9 })
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.copy(lineupHelper.target).y += 2;
+    ring.renderOrder = 998;
+    scene.add(ring);
+    lineupHelper.ring = ring;
+    toast('🎯 Target set — go to the throw spot and press N (SHIFT/ALT = medium/lob)');
+}
+
+// N: from where I stand now, compute the aim that lands on the marker
+function solveAimFromHere(strength) {
+    if (!lineupHelper.target) { toast('No target — aim at the landing spot and press M first'); return; }
+    const sol = solveAim(lineupHelper.target, strength);
+    clearAimHelper(true);
+
+    const name = strength === 1 ? 'full' : strength === 0.5 ? 'medium' : 'lob';
+    if (!sol || sol.err > 40) {
+        toast(`No ${name} throw reaches the target from here (best miss ${sol ? sol.err.toFixed(0) : '∞'}u)`);
+        return;
+    }
+
+    // green dot: put the crosshair exactly on it
+    const p = THREE.MathUtils.degToRad(sol.pitch);
+    const aimDir = sol.fwdH.clone().multiplyScalar(Math.cos(p));
+    aimDir.y = -Math.sin(p);
+    const ghost = new THREE.Mesh(
+        new THREE.SphereGeometry(2.6, 12, 12),
+        new THREE.MeshBasicMaterial({ color: 0x33ff66, depthTest: false, transparent: true, opacity: 0.95 })
+    );
+    ghost.position.copy(sol.eye).addScaledVector(aimDir, 250);
+    ghost.renderOrder = 999;
+    scene.add(ghost);
+    lineupHelper.ghost = ghost;
+
+    // predicted trajectory
+    const pts = [];
+    simulateFlight(sol.eye, sol.fwdH, sol.pitch, strength, pts);
+    const line = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(pts),
+        new THREE.LineBasicMaterial({ color: 0x33ff66, transparent: true, opacity: 0.55, depthTest: false })
+    );
+    line.renderOrder = 997;
+    scene.add(line);
+    lineupHelper.line = line;
+
+    toast(`🎯 ${name}: aim pitch ${sol.pitch.toFixed(1)}, yaw ${sol.yawDeg.toFixed(1)} — put the crosshair on the green dot and throw`);
 }
 
 // Mobile buttons
@@ -519,7 +738,7 @@ function setupMobileButtons() {
     press('btn-pause', () => { if (gameState === 'playing') pauseGame(); });
     press('btn-fly', () => { player.noclip = !player.noclip; $('btn-fly').classList.toggle('act', player.noclip); });
     press('btn-savelu', () => saveLastThrow());
-    press('btn-jt', () => scriptedJumpthrow());
+    press('btn-jt', () => scriptedJumpthrow('bind'));
 }
 
 if (isMobile) {
@@ -684,6 +903,7 @@ function tickPhysics(dt) {
     input.walk = keys.shift;
 
     player.update(dt, input, _fwdH, _right, mapLoader.collider, _fwdFull, mapLoader.ladderZones);
+    tickScriptedJumpthrow();
     grenades.tick(dt);
 }
 
@@ -729,7 +949,7 @@ function animate() {
 
 animate();
 
-window.__debug = { player, mapLoader, grenades, CS2, tuning, camera, THREE, startGame };
+window.__debug = { player, mapLoader, grenades, CS2, tuning, camera, THREE, startGame, solveAim, placeAimTarget, solveAimFromHere, lineupHelper };
 
 window.addEventListener('resize', () => {
     applyFov();
