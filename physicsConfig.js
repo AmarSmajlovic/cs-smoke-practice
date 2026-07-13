@@ -29,7 +29,10 @@ export const CS2 = {
     nadeBaseThrowSpeed: 675,    // 750 (weapon ThrowVelocity) * 0.9
     nadeGravityScale: 0.4,      // grenade projectiles use 0.4 * sv_gravity
     nadeElasticity: 0.45,       // bounce energy retained
-    nadeVelInherit: 1.25,       // player velocity added to throw (jumpthrow bonus)
+    nadeVelInherit: 1.0,        // player velocity added to the throw. CSGO used
+                                // 1.25; CS2 nerfed it — calibrated against the
+                                // cs2utils window jumpthrow (first touch lands
+                                // 5u from reference with 1.0 + instant release)
     nadeRadius: 2,              // projectile collision radius
     nadeSpawnForward: 16,       // spawn distance in front of the eyes
     nadePitchBias: 10,          // degrees thrown above the crosshair when aiming level

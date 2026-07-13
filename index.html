@@ -310,7 +310,7 @@
     <!-- HUD -->
     <div id="crosshair" class="hidden"></div>
     <div id="pos-display" class="hidden"></div>
-    <div id="hud-hint" class="hidden">F = jumpthrow &nbsp;•&nbsp; V noclip &nbsp;•&nbsp; C clear smokes+trails &nbsp;•&nbsp; R respawn</div>
+    <div id="hud-hint" class="hidden">F = jumpthrow &nbsp;•&nbsp; G = peak JT &nbsp;•&nbsp; SHIFT = med, ALT = lob &nbsp;•&nbsp; M = mark target, N = show aim &nbsp;•&nbsp; V noclip &nbsp;•&nbsp; C clear &nbsp;•&nbsp; R respawn</div>
 
     <div id="throw-help" class="hidden">
         <div class="th-row" id="th-full"><span class="mouse"><span class="mb l on"></span><span class="mb r"></span></span> FULL THROW</div>
@@ -375,6 +375,12 @@
             <button class="btn ghost" id="btn-menu">MAIN MENU</button>
         </div>
 
+        <div style="margin:14px auto 0; max-width:520px; display:flex; gap:8px;">
+            <input id="setpos-input" placeholder="Paste setpos ...; setang ... (cs2utils.com / getpos)" spellcheck="false"
+                   style="flex:1; background:#141414; border:1px solid #333; color:#ddd; padding:9px 12px; border-radius:6px; font:12px monospace;">
+            <button class="btn ghost" id="setpos-go" style="white-space:nowrap;">TELEPORT</button>
+        </div>
+
         <div id="lu-wrap">
             <div class="lu-head">
                 <span>📌 SAVED LINEUPS</span>
@@ -384,7 +390,7 @@
         </div>
         <div class="keys-hint desktop-hint">
             <b>WASD</b> move &nbsp; <b>SHIFT</b> walk &nbsp; <b>CTRL</b> crouch &nbsp; <b>SPACE</b> jump<br>
-            <b>LMB</b> full throw &nbsp; <b>RMB</b> lob &nbsp; <b>LMB+RMB</b> medium &nbsp; <b>F</b> = <b>jumpthrow</b> (or hold <b>SPACE</b>, release click)<br>
+            <b>LMB</b> full &nbsp; <b>RMB</b> lob &nbsp; <b>LMB+RMB</b> or <b>SHIFT+LMB</b> medium &nbsp; <b>ALT+LMB</b> lob &nbsp; <b>F</b> = <b>jumpthrow</b>, <b>G</b> = <b>peak JT</b> (SHIFT/ALT picks type)<br>
             thrown nades leave a <b>trail</b> &nbsp; <b>V</b> noclip (fly) &nbsp; <b>C</b> clear smokes+trails &nbsp; <b>R</b> respawn
         </div>
         <div class="keys-hint mobile-hint">

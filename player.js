@@ -147,12 +147,14 @@ export class Player {
             this.onGround = false;
         }
 
-        // Gravity — while grounded keep a small downward bias so the capsule
-        // stays in contact with the floor (prevents onGround flicker)
+        // Gravity — Source applies HALF before the move and half after
+        // (leapfrog); plain Euler loses ~2.4u of jump apex vs the game.
+        // While grounded keep a small downward bias so the capsule stays in
+        // contact with the floor (prevents onGround flicker)
         if (this.onGround) {
             this.velocity.y = -CS2.gravity * dt;
         } else {
-            this.velocity.y = Math.max(this.velocity.y - CS2.gravity * dt, -3500);
+            this.velocity.y = Math.max(this.velocity.y - CS2.gravity * dt * 0.5, -3500);
         }
 
         // Integrate + collide in substeps so fast falls can't tunnel
@@ -167,6 +169,11 @@ export class Player {
             }
         } else {
             this.position.addScaledVector(this.velocity, dt);
+        }
+
+        // second gravity half-step (see above)
+        if (!this.onGround) {
+            this.velocity.y = Math.max(this.velocity.y - CS2.gravity * dt * 0.5, -3500);
         }
 
         // Safety: fell out of the world
