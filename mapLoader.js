@@ -292,15 +292,14 @@ export class MapLoader {
         rootObj.traverse((child) => {
             if (!child.isMesh || !child.geometry.attributes.position) return;
             if (/breakable/.test(child.name.toLowerCase())) return; // nades smash through glass
-            // tree canopies are non-solid in CS2 (window smoke flies through
-            // the palm by jungle) — keep trunks/barks, drop branches/leaves
-            if (/branches|foliage|leaves/.test(child.name.toLowerCase())) return;
-            // railings don't block grenades in CS2 (mid rails famously let
-            // smokes through) — drop them from the collider. metalwall031a is
-            // the Mirage railing-bars material (hammer mesh).
+            // whole trees are non-solid in CS2 (grenades fly through palms —
+            // trunks included), same for railings (mid rails let smokes
+            // through). metalwall031a is the Mirage railing-bars material.
+            // "trees" not "tree": /tree/ would match "street" materials.
+            const PASS = /branches|foliage|leaves|trees|palm|bark|metalrail|metalwall031/i;
+            if (PASS.test(child.name)) return;
             const mats = Array.isArray(child.material) ? child.material : [child.material];
-            if (mats.length && mats.every(m => /metalrail|metalwall031/i.test(m?.name || ''))) return;
-            if (/metalrail/i.test(child.name)) return;
+            if (mats.length && mats.every(m => PASS.test(m?.name || ''))) return;
             const g = child.geometry.index ? child.geometry.toNonIndexed() : child.geometry;
             const src = g.attributes.position;
             const arr = new Float32Array(src.count * 3);
