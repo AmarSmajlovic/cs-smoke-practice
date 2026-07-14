@@ -39,6 +39,9 @@ export const MAPS = {
             // top of the mid->window courtyard wall: flat cap flush with the
             // raised lip (-144) over the step-down shelf behind it
             { min: [-521, -146, -935], max: [-498, -144, -675] },
+            // B apps courtyard tarps: the visual mesh is ~40% holes but the
+            // game's collision is solid — grenades rest on the canopy
+            { min: [220, -2, -2300], max: [520, 0, -1950] },
         ],
         // buyzone centers extracted from the VRF physics export (world HU x/z)
         spawns: {
