@@ -32,6 +32,14 @@ export const MAPS = {
         // that grenades collide with in CS2 (invisible smooth hulls over
         // railings/trims) — without them nades rattle in decorative grooves
         nadeClipsPath: '/maps/mirage-phys.glb',
+        // hand-measured collision fixups (world HU boxes) — the game's real
+        // world-physics hull flattens these spots; our visual-mesh collider
+        // has decorative steps/grooves that trap grenades
+        collisionPatches: [
+            // top of the mid->window courtyard wall: flat cap flush with the
+            // raised lip (-144) over the step-down shelf behind it
+            { min: [-521, -146, -935], max: [-498, -144, -675] },
+        ],
         // buyzone centers extracted from the VRF physics export (world HU x/z)
         spawns: {
             T: { x: -136, z: 1248 },
@@ -115,7 +123,7 @@ export class MapLoader {
         mapRoot.updateMatrixWorld(true);
 
         this.collectSpecialMeshes(visual);
-        this.buildCollider(physicsRoot || visual);
+        this.buildCollider(physicsRoot || visual, mapDef.collisionPatches);
         if (mapDef.nadeClipsPath) await this.buildNadeClips(mapDef.nadeClipsPath, mapDef.scale || 1);
 
         if (region) this.clipToRegion(visual, region);
@@ -254,6 +262,7 @@ export class MapLoader {
                     alphaTest: mat.alphaTest || 0,
                     side: THREE.DoubleSide,
                 });
+                optimalMat.name = mat.name || ''; // keep for collider filtering
                 const name = (mat.name || '').toLowerCase();
                 if (mat.map && (name.includes('foliage') || name.includes('tree') || name.includes('fence') || mat.transparent)) {
                     optimalMat.transparent = false;
@@ -272,7 +281,7 @@ export class MapLoader {
 
     // Merge the given subtree into one static geometry and build a BVH over it.
     // Physics always collides with the FULL map, even when a region hides visuals.
-    buildCollider(rootObj) {
+    buildCollider(rootObj, patches = null) {
         const t0 = performance.now();
         rootObj.updateMatrixWorld(true);
 
@@ -286,6 +295,12 @@ export class MapLoader {
             // tree canopies are non-solid in CS2 (window smoke flies through
             // the palm by jungle) — keep trunks/barks, drop branches/leaves
             if (/branches|foliage|leaves/.test(child.name.toLowerCase())) return;
+            // railings don't block grenades in CS2 (mid rails famously let
+            // smokes through) — drop them from the collider. metalwall031a is
+            // the Mirage railing-bars material (hammer mesh).
+            const mats = Array.isArray(child.material) ? child.material : [child.material];
+            if (mats.length && mats.every(m => /metalrail|metalwall031/i.test(m?.name || ''))) return;
+            if (/metalrail/i.test(child.name)) return;
             const g = child.geometry.index ? child.geometry.toNonIndexed() : child.geometry;
             const src = g.attributes.position;
             const arr = new Float32Array(src.count * 3);
@@ -299,6 +314,22 @@ export class MapLoader {
             stripped.applyMatrix4(child.matrixWorld);
             geometries.push(stripped);
         });
+        // hand-measured collision fixups (world-space boxes)
+        if (patches) {
+            for (const p of patches) {
+                const size = [p.max[0] - p.min[0], p.max[1] - p.min[1], p.max[2] - p.min[2]];
+                const g = new THREE.BoxGeometry(size[0], size[1], size[2]).toNonIndexed();
+                g.translate(
+                    (p.min[0] + p.max[0]) / 2,
+                    (p.min[1] + p.max[1]) / 2,
+                    (p.min[2] + p.max[2]) / 2
+                );
+                const stripped = new THREE.BufferGeometry();
+                stripped.setAttribute('position', g.attributes.position.clone());
+                geometries.push(stripped);
+            }
+        }
+
         const merged = mergeGeometries(geometries, false);
         merged.computeBoundsTree();
         merged.computeBoundingBox();
@@ -352,7 +383,10 @@ export class MapLoader {
                 if (!child.isMesh || !child.geometry.attributes.position) return;
                 let name = child.name, p = child.parent;
                 while (p) { name = p.name + '/' + name; p = p.parent; }
-                if (!/func_clip_vphysics|func_brush/.test(name)) return;
+                // func_clip_vphysics ONLY: those block physics objects by
+                // definition. func_brush solidity isn't in the export and at
+                // least the railing bars are non-solid to grenades in-game.
+                if (!/func_clip_vphysics/.test(name)) return;
                 const g = child.geometry.index ? child.geometry.toNonIndexed() : child.geometry;
                 const src = g.attributes.position;
                 const arr = new Float32Array(src.count * 3);

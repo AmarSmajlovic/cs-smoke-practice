@@ -535,7 +535,8 @@ function tickScriptedJumpthrow() {
     jt.airTicks++;
     const ready = jt.mode === 'peak'
         ? player.velocity.y <= 20
-        : jt.airTicks >= 1;
+        : jt.airTicks >= 2; // 2nd airborne tick lands the cs2utils window
+                            // reference bounce within 5u (1 tick flies ~40u long)
     if (ready) {
         throwSmoke(jt.strength);
         pendingJT = null;
