@@ -154,15 +154,21 @@ export class GrenadeSystem {
                     }
                 }
 
-                // Bounce with split restitution: the normal (out-of-surface)
-                // component uses a lower coefficient than the tangential one —
-                // CS2 nades skim low after grazing bounces instead of popping
-                // up (calibrated on the cs2utils window smoke trail)
+                // Floor bounces damp the vertical component slightly more than
+                // the classic uniform reflect (calibrated on the cs2utils
+                // window smoke chain against the game's real collision hulls:
+                // the hop must graze the corner block at -93 AND dip under the
+                // window header at -57 — a 2-unit vy window that pins the
+                // vertical restitution at ~0.38). Walls use the plain reflect.
                 const into = vel.dot(_normal);
-                _bounceN.copy(_normal).multiplyScalar(into);   // normal part
-                _bounceT.copy(vel).sub(_bounceN);              // tangential part
-                vel.copy(_bounceT).multiplyScalar(tuning.elasticity)
-                    .addScaledVector(_normal, -into * tuning.elasticityVert);
+                if (_normal.y > 0.7) {
+                    _bounceN.copy(_normal).multiplyScalar(into);
+                    _bounceT.copy(vel).sub(_bounceN);
+                    vel.copy(_bounceT).multiplyScalar(tuning.elasticity)
+                        .addScaledVector(_normal, -into * tuning.elasticityVert);
+                } else {
+                    vel.addScaledVector(_normal, -2 * into).multiplyScalar(tuning.elasticity);
+                }
 
                 const isFloor = _normal.y > 0.7;
                 const speed = vel.length();
@@ -275,7 +281,7 @@ export class GrenadeSystem {
                 ).normalize();
 
                 let target = R * Math.cbrt(rMin + (1 - rMin) * Math.random());
-                const hit = this.mapLoader.raycast(center, _dir, target + 10);
+                const hit = this.mapLoader.raycastNade(center, _dir, target + 10);
                 if (hit) target = Math.max(hit.distance - 10, 4);
 
                 particles.push({

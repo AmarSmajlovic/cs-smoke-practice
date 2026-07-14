@@ -29,7 +29,7 @@ export const CS2 = {
     nadeBaseThrowSpeed: 675,    // 750 (weapon ThrowVelocity) * 0.9
     nadeGravityScale: 0.4,      // grenade projectiles use 0.4 * sv_gravity
     nadeElasticity: 0.45,       // bounce: tangential (along-surface) speed kept
-    nadeElasticityVert: 0.28,   // bounce: normal (out of surface) restitution —
+    nadeElasticityVert: 0.38,   // bounce: normal (out of surface) restitution —
                                 // lower than tangential; calibrated against the
                                 // cs2utils window smoke trail (low hop over the
                                 // box after the ledge bounce)
