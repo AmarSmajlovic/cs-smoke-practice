@@ -204,13 +204,16 @@
         body.mobile .keys-hint.mobile-hint { display: block; }
 
         /* ---------- HUD ---------- */
+        /* CS2 classic crosshair: 4 green segments with a gap + black outline */
         #crosshair {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 20px; height: 20px; pointer-events: none; z-index: 10;
+            width: 24px; height: 24px; pointer-events: none; z-index: 10;
         }
-        #crosshair::before, #crosshair::after { content: ''; position: absolute; background: rgba(255,255,255,.85); }
-        #crosshair::before { width: 2px; height: 14px; left: 9px; top: 3px; }
-        #crosshair::after { width: 14px; height: 2px; top: 9px; left: 3px; }
+        #crosshair i { position: absolute; background: #2bfc2b; box-shadow: 0 0 0 1px rgba(0,0,0,.55); }
+        #crosshair i:nth-child(1) { width: 2px; height: 7px; left: 11px; top: 0; }
+        #crosshair i:nth-child(2) { width: 2px; height: 7px; left: 11px; bottom: 0; }
+        #crosshair i:nth-child(3) { width: 7px; height: 2px; top: 11px; left: 0; }
+        #crosshair i:nth-child(4) { width: 7px; height: 2px; top: 11px; right: 0; }
         #pos-display {
             position: fixed; left: 10px; bottom: 8px; z-index: 10;
             font: 11px/1.4 monospace; color: rgba(255,255,255,.55); pointer-events: none;
@@ -308,7 +311,7 @@
     <div id="canvas-container"></div>
 
     <!-- HUD -->
-    <div id="crosshair" class="hidden"></div>
+    <div id="crosshair" class="hidden"><i></i><i></i><i></i><i></i></div>
     <div id="pos-display" class="hidden"></div>
     <div id="hud-hint" class="hidden">F = jumpthrow &nbsp;•&nbsp; G = peak JT &nbsp;•&nbsp; SHIFT = med, ALT = lob &nbsp;•&nbsp; M = mark target, N = show aim &nbsp;•&nbsp; V noclip &nbsp;•&nbsp; C clear &nbsp;•&nbsp; R respawn</div>
 
