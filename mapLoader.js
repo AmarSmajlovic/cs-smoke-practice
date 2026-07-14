@@ -28,18 +28,11 @@ export const MAPS = {
         sizeMB: 35.1, // progress fallback when the server hides Content-Length
         scale: 1 / 0.0254,
         zUp: false,
-        // VRF entity-physics export: func_clip_vphysics / func_brush volumes
-        // that grenades collide with in CS2 (invisible smooth hulls over
-        // railings/trims) — without them nades rattle in decorative grooves
-        nadeClipsPath: '/maps/mirage-phys.glb',
-        // hand-measured collision fixups (world HU boxes) — the game's real
-        // world-physics hull flattens these spots; our visual-mesh collider
-        // has decorative steps/grooves that trap grenades
-        collisionPatches: [
-            // top of the mid->window courtyard wall: flat cap flush with the
-            // raised lip (-144) over the step-down shelf behind it
-            { min: [-521, -146, -935], max: [-498, -144, -675] },
-        ],
+        // The game's REAL world collision (VRF export of world_physics.vmdl,
+        // packed by tools/pack-collision.mjs — already in HU, app axes).
+        // Node names carry the game's collision groups: physics_group_*,
+        // physics_csgo_grenadeclip, physics_npcclip_playerclip, physics_sky…
+        collisionPath: '/maps/mirage-collision.glb',
         // buyzone centers extracted from the VRF physics export (world HU x/z)
         spawns: {
             T: { x: -136, z: 1248 },
@@ -57,7 +50,7 @@ export class MapLoader {
         this.loadedMap = null;         // root group (visual + physics)
         this.visualRoot = null;        // visible geometry only
         this.collider = null;          // merged static mesh with a BVH, used by ALL physics
-        this.nadeClips = null;         // grenade-only clip hulls (func_clip_vphysics/func_brush)
+        this.nadeCollider = null;      // grenade collision (game world_physics groups)
         this.colliderVisualizer = null;
         this.baseHorizontal = null;
         this.ladderZones = [];         // Box3 volumes where the player can climb
@@ -123,8 +116,12 @@ export class MapLoader {
         mapRoot.updateMatrixWorld(true);
 
         this.collectSpecialMeshes(visual);
-        this.buildCollider(physicsRoot || visual, mapDef.collisionPatches);
-        if (mapDef.nadeClipsPath) await this.buildNadeClips(mapDef.nadeClipsPath, mapDef.scale || 1);
+        if (mapDef.collisionPath) {
+            // the game's real collision hulls — used for BOTH player and nades
+            await this.buildGameCollision(mapDef.collisionPath);
+        } else {
+            this.buildCollider(physicsRoot || visual);
+        }
 
         if (region) this.clipToRegion(visual, region);
 
@@ -151,10 +148,10 @@ export class MapLoader {
             this.collider.geometry.dispose();
             this.collider = null;
         }
-        if (this.nadeClips) {
-            this.nadeClips.geometry.disposeBoundsTree();
-            this.nadeClips.geometry.dispose();
-            this.nadeClips = null;
+        if (this.nadeCollider) {
+            this.nadeCollider.geometry.disposeBoundsTree();
+            this.nadeCollider.geometry.dispose();
+            this.nadeCollider = null;
         }
         if (this.colliderVisualizer) {
             this.scene.remove(this.colliderVisualizer);
@@ -366,63 +363,77 @@ export class MapLoader {
         this.buildCollider(this.loadedMap);
     }
 
-    // Grenade-only collision volumes from the VRF entity-physics export:
-    // func_clip_vphysics and func_brush hulls. In CS2 grenades bounce off
-    // these invisible flat boxes (placed over railings/trims); players do NOT
-    // collide with clip_vphysics, so they live in a separate small BVH that
-    // only the grenade raycasts consult.
-    async buildNadeClips(path, scale) {
-        try {
-            const gltf = await this.loader.loadAsync(path);
-            const root = gltf.scene;
-            root.scale.setScalar(scale);
-            root.updateMatrixWorld(true);
+    // Build the player and grenade colliders from the game's real world
+    // physics (world_physics.vmdl export). Group membership follows the
+    // game's rules:
+    //   - physics_group_* / passbullets / sky : solid for everyone
+    //   - physics_csgo_grenadeclip            : grenades only
+    //   - physics_npcclip_playerclip          : players only
+    //   - physics_ladder_*                    : neither (ladder zones handle it)
+    //   - physics_group_glass                 : players only (nades smash through)
+    async buildGameCollision(path) {
+        const t0 = performance.now();
+        const gltf = await this.loader.loadAsync(path);
+        const root = gltf.scene;
+        root.updateMatrixWorld(true);
 
-            const geometries = [];
-            root.traverse((child) => {
-                if (!child.isMesh || !child.geometry.attributes.position) return;
-                let name = child.name, p = child.parent;
-                while (p) { name = p.name + '/' + name; p = p.parent; }
-                // func_clip_vphysics ONLY: those block physics objects by
-                // definition. func_brush solidity isn't in the export and at
-                // least the railing bars are non-solid to grenades in-game.
-                if (!/func_clip_vphysics/.test(name)) return;
-                const g = child.geometry.index ? child.geometry.toNonIndexed() : child.geometry;
-                const src = g.attributes.position;
-                const arr = new Float32Array(src.count * 3);
-                for (let i = 0; i < src.count; i++) {
-                    arr[i * 3] = src.getX(i);
-                    arr[i * 3 + 1] = src.getY(i);
-                    arr[i * 3 + 2] = src.getZ(i);
-                }
-                const stripped = new THREE.BufferGeometry();
-                stripped.setAttribute('position', new THREE.BufferAttribute(arr, 3));
-                stripped.applyMatrix4(child.matrixWorld);
-                geometries.push(stripped);
-            });
-            if (!geometries.length) return;
-            const merged = mergeGeometries(geometries, false);
+        const playerGeos = [], nadeGeos = [];
+        root.traverse((child) => {
+            if (!child.isMesh || !child.geometry.attributes.position) return;
+            let name = child.name, p = child.parent;
+            while (p) { name = p.name + '/' + name; p = p.parent; }
+            if (/ladder/i.test(name)) return;
+            const isGrenadeClip = /grenadeclip/i.test(name);
+            const isPlayerClip = /playerclip|npcclip/i.test(name);
+            const isGlass = /group_glass/i.test(name);
+
+            const g = child.geometry.index ? child.geometry.toNonIndexed() : child.geometry;
+            const src = g.attributes.position;
+            const arr = new Float32Array(src.count * 3);
+            for (let i = 0; i < src.count; i++) {
+                arr[i * 3] = src.getX(i);
+                arr[i * 3 + 1] = src.getY(i);
+                arr[i * 3 + 2] = src.getZ(i);
+            }
+            const stripped = new THREE.BufferGeometry();
+            stripped.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+            stripped.applyMatrix4(child.matrixWorld);
+
+            if (!isGrenadeClip) playerGeos.push(stripped);
+            if (!isPlayerClip && !isGlass) nadeGeos.push(stripped);
+        });
+
+        const buildMesh = (geos) => {
+            const merged = mergeGeometries(geos, false);
             merged.computeBoundsTree();
-            this.nadeClips = new THREE.Mesh(merged, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
-            this.nadeClips.visible = false;
-            console.log(`Nade clips: ${geometries.length} volumes, ${(merged.attributes.position.count / 3).toLocaleString()} tris`);
-        } catch (e) {
-            console.warn('Nade clips failed to load (grenades will use the visual mesh only):', e);
-        }
+            merged.computeBoundingBox();
+            const mesh = new THREE.Mesh(merged, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+            mesh.visible = false;
+            return mesh;
+        };
+        this.collider = buildMesh(playerGeos);
+        this.nadeCollider = buildMesh(nadeGeos);
+
+        const wire = new THREE.Mesh(this.collider.geometry, new THREE.MeshBasicMaterial({
+            color: 0x00ff88, wireframe: true, transparent: true, opacity: 0.15,
+        }));
+        wire.visible = false;
+        this.colliderVisualizer = wire;
+        this.scene.add(wire);
+
+        console.log(`Game collision built in ${(performance.now() - t0).toFixed(0)}ms:`,
+            `player ${(this.collider.geometry.attributes.position.count / 3).toLocaleString()} tris,`,
+            `nade ${(this.nadeCollider.geometry.attributes.position.count / 3).toLocaleString()} tris`);
     }
 
-    // Raycast for GRENADES: nearest hit of the world collider and the clip hulls
+    // Raycast for GRENADES: the game's grenade collision when available
     raycastNade(origin, direction, far) {
-        const world = this.raycast(origin, direction, far);
-        if (!this.nadeClips) return world;
+        if (!this.nadeCollider) return this.raycast(origin, direction, far);
         _raycaster.set(origin, direction);
         _raycaster.far = far;
         _raycaster.firstHitOnly = true;
-        const hits = _raycaster.intersectObject(this.nadeClips);
-        const clip = hits.length ? hits[0] : null;
-        if (!clip) return world;
-        if (!world) return clip;
-        return clip.distance < world.distance ? clip : world;
+        const hits = _raycaster.intersectObject(this.nadeCollider);
+        return hits.length ? hits[0] : null;
     }
 
     // Raycast helper against the collider. Returns first hit or null.

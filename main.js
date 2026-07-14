@@ -30,18 +30,28 @@ scene.background = new THREE.Color(0x87ceeb);
 const camera = new THREE.PerspectiveCamera(73.74, window.innerWidth / window.innerHeight, 1, 30000);
 scene.add(camera);
 
+// Viewport locked to 16:9 (letterboxed) so the view matches CS2 videos and
+// screenshots 1:1 regardless of the window shape — vertical FOV fixed at
+// 73.74 (90 horizontal at 4:3), exactly like the game.
 function applyFov() {
-    // CS2 behavior: vertical FOV fixed, wider screens see more horizontally
-    camera.aspect = window.innerWidth / window.innerHeight;
+    const W = window.innerWidth, H = window.innerHeight;
+    let w = W, h = Math.round(W * 9 / 16);
+    if (h > H) { h = H; w = Math.round(H * 16 / 9); }
+    renderer.setSize(w, h);
+    const el = renderer.domElement;
+    el.style.position = 'absolute';
+    el.style.left = ((W - w) / 2) + 'px';
+    el.style.top = ((H - h) / 2) + 'px';
+    camera.aspect = 16 / 9;
     camera.fov = 73.74;
     camera.updateProjectionMatrix();
 }
-applyFov();
 
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 $('canvas-container').appendChild(renderer.domElement);
+$('canvas-container').style.background = '#000';
+applyFov();
 
 // Calibrated for three's physical lighting mode (r155+)
 scene.add(new THREE.HemisphereLight(0xe8f0ff, 0x8a7a60, 2.0));
@@ -407,7 +417,7 @@ document.addEventListener('keydown', (e) => {
     if (e.code === 'KeyM') placeAimTarget();
     if (e.code === 'KeyN') solveAimFromHere(e.shiftKey ? 0.5 : e.altKey ? 0.0 : 1.0);
     if (k === 'c') { grenades.clearAllSmokes(); clearAimHelper(); }
-    if (k === 'r') player.spawn(spawnPoint.x, spawnPoint.y, spawnPoint.z);
+    if (k === 'r') { player.spawn(spawnPoint.x, spawnPoint.y, spawnPoint.z); playerFrozen = false; }
     if (k === 'v') player.noclip = !player.noclip;
     if (k === 'l') saveLastThrow();
 });
@@ -549,16 +559,20 @@ function tickScriptedJumpthrow() {
 // teleport to the exact spot with the exact view angles. Coordinate mapping
 // (verified against the cs2utils window lineup): our x = game y,
 // our z = game x, height identical; getpos reports the EYE, so feet = z - 64.
-const _downVec = new THREE.Vector3(0, -1, 0);
+// After a teleport the player is frozen at the EXACT imported position until
+// they press a movement key — the capsule depenetration would otherwise nudge
+// them off spots where the game hull fits tight against decorative trim.
+let playerFrozen = false;
 function applySetposString(str) {
     const m = str.match(/setpos\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)(?:.*?setang\s+(-?[\d.]+)\s+(-?[\d.]+))?/s);
     if (!m || !map) return false;
     const gy = +m[2], gx = +m[1], gz = +m[3];
     const ox = gy, oz = gx;
     let oy = gz - CS2.eyeStand;
-    // snap the feet to the floor when it's within reach (getpos vs setpos quirk)
-    const hit = mapLoader.raycast(new THREE.Vector3(ox, oy + 40, oz), _downVec, 200);
-    if (hit && Math.abs(hit.point.y - oy) < 80) oy = hit.point.y + 1;
+    // getpos reports the exact eye — trust it to the decimal, NO floor snap:
+    // the player is frozen at this spot until they move, so the view matches
+    // the game 1:1 even when they stood on a prop/ledge our ray would miss
+    // (a snap once pulled a lineup 80u down to the ground below the ledge).
     player.position.set(ox, oy, oz);
     player.velocity.set(0, 0, 0);
     if (m[4] !== undefined) {
@@ -569,6 +583,7 @@ function applySetposString(str) {
         camera.rotation.set(-gPitch * Math.PI / 180, oYaw, 0);
     }
     player.getEyePosition(camera.position);
+    playerFrozen = true;
     return true;
 }
 
@@ -904,7 +919,12 @@ function tickPhysics(dt) {
     input.duck = keys.ctrl;
     input.walk = keys.shift;
 
-    player.update(dt, input, _fwdH, _right, mapLoader.collider, _fwdFull, mapLoader.ladderZones);
+    if (playerFrozen) {
+        if (input.forwardMove || input.sideMove || input.jump || input.duck) playerFrozen = false;
+    }
+    if (!playerFrozen) {
+        player.update(dt, input, _fwdH, _right, mapLoader.collider, _fwdFull, mapLoader.ladderZones);
+    }
     tickScriptedJumpthrow();
     grenades.tick(dt);
 }
@@ -954,7 +974,6 @@ animate();
 window.__debug = { player, mapLoader, grenades, CS2, tuning, camera, THREE, startGame, solveAim, placeAimTarget, solveAimFromHere, lineupHelper };
 
 window.addEventListener('resize', () => {
-    applyFov();
+    applyFov(); // also sizes + letterboxes the canvas
     updateOrientationClass();
-    renderer.setSize(window.innerWidth, window.innerHeight);
 });
