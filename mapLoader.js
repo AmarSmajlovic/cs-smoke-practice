@@ -292,11 +292,11 @@ export class MapLoader {
         rootObj.traverse((child) => {
             if (!child.isMesh || !child.geometry.attributes.position) return;
             if (/breakable/.test(child.name.toLowerCase())) return; // nades smash through glass
-            // whole trees are non-solid in CS2 (grenades fly through palms —
-            // trunks included), same for railings (mid rails let smokes
-            // through). metalwall031a is the Mirage railing-bars material.
+            // Non-solid to grenades in CS2: whole trees (trunks included),
+            // railings (metalwall031a = Mirage rail bars), rooftop antennas
+            // and dishes (roof_dish bucket), telephone poles and all wiring.
             // "trees" not "tree": /tree/ would match "street" materials.
-            const PASS = /branches|foliage|leaves|trees|palm|bark|metalrail|metalwall031/i;
+            const PASS = /branches|foliage|leaves|trees|palm|bark|metalrail|metalwall031|roof_dish|dishestibet|telephone_pole|electric_cables|wall_wires|wirespout/i;
             if (PASS.test(child.name)) return;
             const mats = Array.isArray(child.material) ? child.material : [child.material];
             if (mats.length && mats.every(m => PASS.test(m?.name || ''))) return;
