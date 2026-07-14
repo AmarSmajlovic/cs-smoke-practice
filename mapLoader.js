@@ -39,9 +39,6 @@ export const MAPS = {
             // top of the mid->window courtyard wall: flat cap flush with the
             // raised lip (-144) over the step-down shelf behind it
             { min: [-521, -146, -935], max: [-498, -144, -675] },
-            // B apps courtyard tarps: the visual mesh is ~40% holes but the
-            // game's collision is solid — grenades rest on the canopy
-            { min: [220, -2, -2300], max: [520, 0, -1950] },
         ],
         // buyzone centers extracted from the VRF physics export (world HU x/z)
         spawns: {
@@ -297,9 +294,10 @@ export class MapLoader {
             if (/breakable/.test(child.name.toLowerCase())) return; // nades smash through glass
             // Non-solid to grenades in CS2: whole trees (trunks included),
             // railings (metalwall031a = Mirage rail bars), rooftop antennas
-            // and dishes (roof_dish bucket), telephone poles and all wiring.
-            // "trees" not "tree": /tree/ would match "street" materials.
-            const PASS = /branches|foliage|leaves|trees|palm|bark|metalrail|metalwall031|roof_dish|dishestibet|telephone_pole|electric_cables|wall_wires|wirespout/i;
+            // and dishes (roof_dish bucket), telephone poles, all wiring, and
+            // cloth (B apps courtyard tarps — smokes fly through into the
+            // courtyard). "trees" not "tree": /tree/ matches "street".
+            const PASS = /branches|foliage|leaves|trees|palm|bark|metalrail|metalwall031|roof_dish|dishestibet|telephone_pole|electric_cables|wall_wires|wirespout|tarp|cloth|awning/i;
             if (PASS.test(child.name)) return;
             const mats = Array.isArray(child.material) ? child.material : [child.material];
             if (mats.length && mats.every(m => PASS.test(m?.name || ''))) return;
