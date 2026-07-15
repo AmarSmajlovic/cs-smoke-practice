@@ -1,6 +1,15 @@
 // CS2 constants — everything in Hammer units (1 unit = 0.75 inch... actually 1u = 1/16 ft).
 // The world is scaled so 1 world unit == 1 Hammer unit, so these apply directly.
 
+// Source 2 Viewer exports glTF in meters, at 0.0254 m per Hammer unit. Anything
+// coming out of the VRF pipeline — maps, models — needs this to land in HU.
+export const VRF_SCALE = 1 / 0.0254;
+
+// The grenade canister is bare metal, so it draws its colour from reflected
+// environment rather than from the lights. Shared by the viewmodel and the
+// thrown projectile so they don't drift apart.
+export const GRENADE_ENV_INTENSITY = 2.5;
+
 export const CS2 = {
     TICK: 1 / 64,               // CS2 tick rate (sub-tick aside, physics is 64/s)
 

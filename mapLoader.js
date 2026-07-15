@@ -7,6 +7,7 @@ import {
     acceleratedRaycast,
 } from 'three-mesh-bvh';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { VRF_SCALE } from './physicsConfig.js';
 
 // Accelerate all raycasts against geometries that have a bounds tree
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
@@ -21,12 +22,11 @@ THREE.Mesh.prototype.raycast = acceleratedRaycast;
 //    the collider instead of the visual mesh when present
 //  - zUp: file has Z as the vertical axis
 export const MAPS = {
-    // VRF exports in meters (0.0254 m per Hammer unit) -> back to HU
     mirage: {
         name: 'de_mirage',
         path: '/maps/mirage.glb',
         sizeMB: 35.1, // progress fallback when the server hides Content-Length
-        scale: 1 / 0.0254,
+        scale: VRF_SCALE,
         zUp: false,
         // The game's REAL world collision (VRF export of world_physics.vmdl,
         // packed by tools/pack-collision.mjs — already in HU, app axes).

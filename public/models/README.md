@@ -1,16 +1,14 @@
 # Models Folder
 
-Place your 3D models here:
+## smoke_grenade.glb
 
-## Smoke Grenade
-- File: `smoke_grenade.glb`
-- Recommended size: Small (< 1MB)
-- Format: GLB (GLTF binary)
+The real CS2 smoke grenade, extracted from the game files:
+`weapons/models/grenade/smokegrenade/weapon_smokegrenade.vmdl_c`
 
-## How to get CS2 smoke grenade model:
-1. Download from Sketchfab or similar sites
-2. Or export from CS2 using tools like Blender Source Tools
-3. Save as `smoke_grenade.glb`
-4. Place in this folder
+Used for both the viewmodel (`main.js`) and the thrown projectile (`grenades.js`).
 
-The system will automatically use the GLB model if found, otherwise it uses a placeholder sphere.
+**Do not replace this by hand.** It comes out of the pipeline documented in
+`MAP_GUIDE.md` → "Modeli", and it needs `tools/optimize-model.mjs --fix-orm` —
+without that flag VRF's channel-swapped ORM makes the grenade render black.
+
+Meshopt-compressed, so any loader for it needs `.setMeshoptDecoder(MeshoptDecoder)`.
