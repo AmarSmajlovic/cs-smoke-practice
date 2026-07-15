@@ -9,3 +9,4 @@ test-*.js
 test-*.cjs
 .claude/
 tools/export-phys/
+tools/exceptions.txt

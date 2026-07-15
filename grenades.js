@@ -1,8 +1,33 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { CS2, tuning } from './physicsConfig.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { CS2, tuning, VRF_SCALE, GRENADE_ENV_INTENSITY } from './physicsConfig.js';
+
+// Smoke particle animation, injected into three's Points shader. Rebuilds the
+// vertex position from the cloud centre each frame instead of reading `position`,
+// which is what keeps the per-frame cost off the CPU.
+const SMOKE_VERT_HEAD = `
+    uniform vec3 uCenter;
+    uniform float uBloom;
+    uniform float uTime;
+    uniform float uFloorY;
+    attribute vec3 aOffset;
+    attribute vec2 aSwirl;
+`;
+const SMOKE_VERT_BODY = `
+    float swirl = sin(uTime * aSwirl.y + aSwirl.x) * 6.0;
+    vec3 transformed = uCenter + aOffset * uBloom;
+    transformed.y = max(transformed.y, uFloorY);
+    transformed.x += swirl;
+    transformed.z -= swirl;
+    transformed.y += abs(swirl) * 0.3;
+`;
 
 const _dir = new THREE.Vector3();
+const _off = new THREE.Vector3();
+const _tan = new THREE.Vector3();
+const _rand = new THREE.Vector3();
+const _wall = new THREE.Vector3();
 const _move = new THREE.Vector3();
 const _normal = new THREE.Vector3();
 const _bounceN = new THREE.Vector3();
@@ -26,8 +51,12 @@ export class GrenadeSystem {
 
     async loadGrenadeModel() {
         try {
-            const gltf = await new GLTFLoader().loadAsync('/models/smoke_grenade.glb');
+            const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+            const gltf = await loader.loadAsync('/models/smoke_grenade.glb');
             this.grenadeModelGLB = gltf.scene;
+            this.grenadeModelGLB.traverse((o) => {
+                if (o.isMesh) o.material.envMapIntensity = GRENADE_ENV_INTENSITY;
+            });
             console.log('Smoke grenade GLB model loaded');
         } catch (e) {
             console.log('No grenade GLB, using placeholder sphere');
@@ -37,7 +66,9 @@ export class GrenadeSystem {
     makeGrenadeMesh() {
         if (this.grenadeModelGLB) {
             const m = this.grenadeModelGLB.clone();
-            m.scale.setScalar(0.08); // model was authored for meter-scale worlds
+            // The CS2 model is real-scale once out of VRF's meters: ~2.3 x 2.1 x
+            // 4.6 HU, which lines up with the nadeRadius=2 collision sphere.
+            m.scale.setScalar(VRF_SCALE);
             return m;
         }
         return new THREE.Mesh(
@@ -255,9 +286,47 @@ export class GrenadeSystem {
         this.createSmoke(p.clone());
     }
 
-    // CS2-style cloud: dense cream billow ~290u wide that hugs the ground and
-    // never expands through walls (each particle capped by a raycast).
-    // Two particle layers: big puffs for the body + smaller ones for detail.
+    // CS2-style cloud: a dense grey billow that hugs the ground, never expands
+    // through walls, and banks along the ones it meets instead of being sliced
+    // off by them. Each particle's resting offset is baked once at detonation;
+    // the bloom and swirl then run entirely in the vertex shader, so animating a
+    // cloud costs two uniform writes per layer per frame instead of a JS loop
+    // over every particle.
+    // Where a single smoke particle comes to rest, as an offset from the cloud
+    // centre. Left alone it just reaches `target` along `dir`. If a wall is in
+    // the way, capping it there would slice the cloud flat against the surface —
+    // real smoke banks and runs along the face instead. So the reach it didn't
+    // get to use is redirected into the wall's tangent plane, which is what
+    // fills the corner and spreads the cloud up against walls.
+    reachThroughWorld(center, dir, target, out) {
+        out.copy(dir).multiplyScalar(target);
+        const hit = this.mapLoader.raycastNade(center, dir, target + 4);
+        if (!hit) return out;
+
+        const stop = Math.max(hit.distance - 4, 2);
+        let excess = target - stop;
+        out.copy(dir).multiplyScalar(stop);
+        if (excess < 1) return out;
+
+        // Slide direction: the particle's own heading flattened onto the wall,
+        // plus some scatter so a head-on cloud fans out instead of streaking.
+        const n = hit.face.normal; // nadeCollider sits at identity — already world
+        _tan.copy(dir).addScaledVector(n, -dir.dot(n));
+        _rand.set(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1);
+        _rand.addScaledVector(n, -_rand.dot(n));
+        _tan.addScaledVector(_rand, 0.6);
+        if (_tan.lengthSq() < 1e-6) return out;
+        _tan.normalize();
+
+        // Sliding can walk straight into the next wall of a corner, so the run
+        // along the face gets the same treatment as the run out from the centre.
+        _wall.copy(center).add(out);
+        const slideHit = this.mapLoader.raycastNade(_wall, _tan, excess + 4);
+        if (slideHit) excess = Math.max(slideHit.distance - 4, 0);
+
+        return out.addScaledVector(_tan, excess * 0.8);
+    }
+
     createSmoke(groundPos) {
         if (this.smokes.length >= this.maxSmokes) {
             this.removeSmoke(this.smokes[0]);
@@ -268,9 +337,14 @@ export class GrenadeSystem {
         center.y += CS2.smokeRadius * 0.4;
         const R = CS2.smokeRadius;
 
-        const makeLayer = (count, size, opacity, color, rMin) => {
+        // rMin/rMax carve out the shell a layer lives in, as a fraction of R:
+        // cbrt keeps the draw uniform by volume, so rMin=0,rMax=1 fills the whole
+        // ball evenly and a low rMax packs a layer into the middle.
+        const makeLayer = (count, size, opacity, color, rMin, rMax = 1) => {
             const positions = new Float32Array(count * 3);
-            const particles = [];
+            const offsets = new Float32Array(count * 3);
+            const swirls = new Float32Array(count * 2);
+
             for (let i = 0; i < count; i++) {
                 _dir.set(
                     Math.random() * 2 - 1,
@@ -278,22 +352,30 @@ export class GrenadeSystem {
                     Math.random() * 2 - 1
                 ).normalize();
 
-                let target = R * Math.cbrt(rMin + (1 - rMin) * Math.random());
-                const hit = this.mapLoader.raycastNade(center, _dir, target + 10);
-                if (hit) target = Math.max(hit.distance - 10, 4);
+                const target = R * rMax * Math.cbrt(rMin + (1 - rMin) * Math.random());
+                this.reachThroughWorld(center, _dir, target, _off);
 
-                particles.push({
-                    dir: _dir.clone(),
-                    target,
-                    swirlPhase: Math.random() * Math.PI * 2,
-                    swirlSpeed: 0.2 + Math.random() * 0.4,
-                });
+                offsets[i * 3] = _off.x;
+                offsets[i * 3 + 1] = _off.y;
+                offsets[i * 3 + 2] = _off.z;
+                swirls[i * 2] = Math.random() * Math.PI * 2;       // phase
+                swirls[i * 2 + 1] = 0.2 + Math.random() * 0.4;     // speed
+                // Unused by the shader (it builds the position from uCenter +
+                // aOffset), but three still wants a position attribute.
                 positions[i * 3] = center.x;
                 positions[i * 3 + 1] = groundPos.y + 2;
                 positions[i * 3 + 2] = center.z;
             }
+
             const geometry = new THREE.BufferGeometry();
             geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('aOffset', new THREE.BufferAttribute(offsets, 3));
+            geometry.setAttribute('aSwirl', new THREE.BufferAttribute(swirls, 2));
+            // Every position is the centre, so an automatic bounding sphere would
+            // be a point and the cloud would pop out of view the moment its centre
+            // left the frustum. Cover the real extent by hand.
+            geometry.boundingSphere = new THREE.Sphere(center.clone(), R * 1.5);
+
             const material = new THREE.PointsMaterial({
                 color, size,
                 map: getSmokeSprite(),
@@ -302,14 +384,33 @@ export class GrenadeSystem {
                 depthWrite: false,
                 sizeAttenuation: true,
             });
+
+            const layer = { baseOpacity: opacity, shader: null };
+            material.onBeforeCompile = (shader) => {
+                shader.uniforms.uCenter = { value: center };
+                shader.uniforms.uBloom = { value: 0 };
+                shader.uniforms.uTime = { value: 0 };
+                shader.uniforms.uFloorY = { value: groundPos.y + 2 };
+                shader.vertexShader = SMOKE_VERT_HEAD + shader.vertexShader
+                    .replace('#include <begin_vertex>', SMOKE_VERT_BODY);
+                layer.shader = shader;
+            };
+            // All layers compile to the same source; keep them on one program.
+            material.customProgramCacheKey = () => 'smoke-points';
+
             const mesh = new THREE.Points(geometry, material);
             this.scene.add(mesh);
-            return { mesh, geometry, material, particles, baseOpacity: opacity };
+            return Object.assign(layer, { mesh, geometry, material });
         };
 
+        // CS2 smoke is a near-neutral grey-white mass, not a cream haze. Three
+        // layers so the cloud is opaque through the middle but still breaks up
+        // at the rim: a packed core that kills all see-through, the body that
+        // sets the silhouette, and darker detail puffs for shading.
         const layers = [
-            makeLayer(500, 130, 0.96, 0xdad4c6, 0.10), // big cream body puffs
-            makeLayer(450, 70, 0.9, 0xc9c3b4, 0.30),   // smaller darker detail
+            makeLayer(200, 150, 1.0, 0xdedede, 0.0, 0.62),  // packed opaque core
+            makeLayer(420, 120, 0.98, 0xd4d4d2, 0.10),      // body / silhouette
+            makeLayer(330, 62, 0.92, 0xb2b2b0, 0.34),       // darker rim detail
         ];
 
         this.smokes.push({
@@ -335,19 +436,13 @@ export class GrenadeSystem {
             const fadeStart = CS2.smokeDurationMs - 3000;
             const fade = elapsed > fadeStart ? 1 - (elapsed - fadeStart) / 3000 : 1;
 
-            const c = smoke.center;
-            const floorY = smoke.floorY + 2;
             for (const layer of smoke.layers) {
-                const pos = layer.geometry.attributes.position.array;
-                for (let j = 0; j < layer.particles.length; j++) {
-                    const pt = layer.particles[j];
-                    const d = pt.target * bloom;
-                    const swirl = Math.sin(smoke.time * pt.swirlSpeed + pt.swirlPhase) * 6;
-                    pos[j * 3] = c.x + pt.dir.x * d + swirl;
-                    pos[j * 3 + 1] = Math.max(c.y + pt.dir.y * d, floorY) + Math.abs(swirl) * 0.3;
-                    pos[j * 3 + 2] = c.z + pt.dir.z * d - swirl;
+                // null until the material has compiled — the cloud just sits
+                // unbloomed for that one frame
+                if (layer.shader) {
+                    layer.shader.uniforms.uBloom.value = bloom;
+                    layer.shader.uniforms.uTime.value = smoke.time;
                 }
-                layer.geometry.attributes.position.needsUpdate = true;
                 layer.material.opacity = layer.baseOpacity * fade;
             }
         }
@@ -387,10 +482,15 @@ function getSmokeSprite() {
     c.width = c.height = S;
     const ctx = c.getContext('2d');
 
+    // Hold near-full alpha out to ~70% of the radius before falling off. A soft
+    // linear gradient makes every particle read as a wisp; CS2 smoke reads as a
+    // solid mass, so each puff needs a body with a defined edge, not a haze.
     const blob = (x, y, r, a) => {
         const g = ctx.createRadialGradient(x, y, 0, x, y, r);
         g.addColorStop(0, `rgba(255,255,255,${a})`);
-        g.addColorStop(0.65, `rgba(255,255,255,${a * 0.55})`);
+        g.addColorStop(0.55, `rgba(255,255,255,${a * 0.96})`);
+        g.addColorStop(0.78, `rgba(255,255,255,${a * 0.72})`);
+        g.addColorStop(0.92, `rgba(255,255,255,${a * 0.24})`);
         g.addColorStop(1, 'rgba(255,255,255,0)');
         ctx.fillStyle = g;
         ctx.beginPath();
