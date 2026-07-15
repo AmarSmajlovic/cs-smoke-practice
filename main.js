@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import GUI from 'lil-gui';
 import { MapLoader, MAPS } from './mapLoader.js';
 import { Player } from './player.js';
 import { GrenadeSystem } from './grenades.js';
-import { CS2, tuning } from './physicsConfig.js';
+import { CS2, tuning, VRF_SCALE, GRENADE_ENV_INTENSITY } from './physicsConfig.js';
 
 // ---------------------------------------------------------------- State
 const isMobile = 'ontouchstart' in window && matchMedia('(pointer: coarse)').matches;
@@ -58,6 +60,13 @@ scene.add(new THREE.HemisphereLight(0xe8f0ff, 0x8a7a60, 2.0));
 const dirLight = new THREE.DirectionalLight(0xfff2dd, 1.1);
 dirLight.position.set(2000, 4000, 1500);
 scene.add(dirLight);
+
+// The CS2 grenade's ORM map is ~0.88 metalness, and metal with nothing to
+// reflect renders black no matter how many lights you point at it. The map is
+// converted to Lambert on load, so this environment only reaches the viewmodel.
+const _pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = _pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+_pmrem.dispose();
 
 // ---------------------------------------------------------------- Look controls
 const controls = new PointerLockControls(camera, renderer.domElement);
@@ -343,34 +352,152 @@ $('btn-resume').addEventListener('click', resumeGame);
 $('btn-menu').addEventListener('click', backToMenu);
 
 // ---------------------------------------------------------------- Viewmodel
+// The arms carry the grenade: CS2's own viewmodel skeleton is driven by CS2's own
+// clips (tools/pack-anims.mjs), and the canister hangs off the right hand bone.
+// The clips address bones by name, so AnimationMixer binds them to the arms rig
+// without any retargeting — the eight *_TWIST helper bones in the mesh aren't in
+// the clips and simply stay put, which is invisible at viewmodel distance.
+let viewmodel = null;      // arms + gloves root
+let vmMixer = null;
+let vmActions = {};
+let vmCurrent = null;      // action currently faded in
+let handBone = null;
 let grenadeInHand = null;
 let hasSmoke = true;
-// held low in the bottom-right corner, tilted like a hand grip
-const vmBase = new THREE.Vector3(7.8, -7.1, -12);
-const vmRot = new THREE.Euler(0.55, -0.7, -0.18);
+// Whole-rig placement in camera space; the pose within it comes from the clips.
+// VRF's Y-up conversion is a 120° turn about (-1,-1,-1), which sends Source's +X
+// (forward) to glTF's +Z — but a three camera looks down -Z, so a rig imported
+// as-is has its arms behind the viewer and left/right mirrored. Half a turn about
+// Y undoes both at once.
+const vmBase = new THREE.Vector3(0, -1.0, 5.0);
+const vmRot = new THREE.Euler(0, Math.PI, 0);
+// Viewmodels are drawn bigger than life in every shooter, CS2 included — at true
+// 1:1 the glove is a thumbnail in the corner. This is taste, not a conversion.
+const VM_SCALE = VRF_SCALE * 1.45;
+const vmEnv = { intensity: GRENADE_ENV_INTENSITY };
+let touchWindup = false; // mobile throw button held
 let bobPhase = 0;
 const sway = { x: 0, y: 0 };
 let lastCamYaw = 0, lastCamPitch = 0;
 
-(async function createGrenadeInHand() {
+// Grenade offset on the wpn bone — the clips animate the bone, this seats the
+// canister in the fist on top of the export-convention cancel. Tune via the GUI.
+const gripPos = new THREE.Vector3(0, 0, 0);
+const gripRot = new THREE.Euler(0, 0, 0);
+const nadeCancelQ = new THREE.Quaternion();
+const _gripQ = new THREE.Quaternion();
+
+(async function createViewmodel() {
+    const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+    let anims;
     try {
-        const gltf = await new GLTFLoader().loadAsync('/models/smoke_grenade.glb');
-        grenadeInHand = gltf.scene;
-        grenadeInHand.scale.setScalar(0.046);
+        const [armsGltf, animGltf, nadeGltf] = await Promise.all([
+            loader.loadAsync('/models/arms.glb'),
+            loader.loadAsync('/models/nade_anims.glb'),
+            loader.loadAsync('/models/smoke_grenade.glb'),
+        ]);
+        viewmodel = armsGltf.scene;
+        anims = animGltf.animations;
+        grenadeInHand = nadeGltf.scene;
     } catch (e) {
-        grenadeInHand = new THREE.Mesh(
-            new THREE.SphereGeometry(1.2, 10, 10),
-            new THREE.MeshLambertMaterial({ color: 0x4a5d4a })
-        );
+        console.warn('viewmodel assets failed to load', e);
+        return;
     }
-    camera.add(grenadeInHand);
-    grenadeInHand.position.copy(vmBase);
-    grenadeInHand.rotation.copy(vmRot);
-    grenadeInHand.visible = hasSmoke;
+
+    viewmodel.scale.setScalar(VM_SCALE);
+    camera.add(viewmodel);
+
+    // CS2 doesn't parent the grenade to the hand — it has a dedicated "wpn" bone
+    // that the clips animate with the real carry and release motion, including
+    // the moment it leaves the fingers. The arms model has no such bone (it's a
+    // weapon-rig bone), so add an empty one under the same parent the clip rig
+    // uses and the animation tracks bind to it by name.
+    const rigRoot = viewmodel.getObjectByName('arm_upper_R')?.parent ?? viewmodel;
+    handBone = new THREE.Object3D();
+    handBone.name = 'wpn';
+    rigRoot.add(handBone);
+    handBone.add(grenadeInHand);
+    // Every VRF export carries the same Source->glTF conversion on its root: a
+    // 0.0254 scale and a 120° turn about (-1,-1,-1). Inside the rig that
+    // conversion has already been applied once by rigRoot, and wpn is expressed
+    // in Source axes — so the grenade's own copy of it has to come back off, or
+    // the model ends up a 0.1u speck lying at the wrong angle.
+    nadeCancelQ.copy(grenadeInHand.children[0].quaternion).invert();
+    grenadeInHand.scale.setScalar(VRF_SCALE);
+    // The canister is bare metal (metalness ~1 everywhere except the printed
+    // labels), so all of its colour is reflected environment tinted by a dark
+    // albedo. RoomEnvironment is a dim indoor box and Mirage is in daylight —
+    // without a push the grenade reads as a black blob.
+    grenadeInHand.traverse((o) => {
+        if (o.isMesh) o.material.envMapIntensity = vmEnv.intensity;
+    });
+    // Arms are cloth and skin — they want the plain lights, not the metal push.
+    viewmodel.traverse((o) => {
+        if (o.isMesh) { o.material.envMapIntensity = 0.5; o.frustumCulled = false; }
+    });
+
+    vmMixer = new THREE.AnimationMixer(viewmodel);
+    for (const clip of anims) vmActions[clip.name] = vmMixer.clipAction(clip);
+    for (const name of ['charge_high', 'charge_mid', 'charge_low', 'throw_over', 'throw_under', 'draw']) {
+        vmActions[name]?.setLoop(THREE.LoopOnce, 1);
+        if (vmActions[name]) vmActions[name].clampWhenFinished = true;
+    }
+    // Seat the rig and evaluate idle before the first render, or the one frame
+    // between loading and the first update shows the bind pose.
+    viewmodel.position.copy(vmBase);
+    viewmodel.rotation.copy(vmRot);
+    playVm('idle', 0);
+    vmMixer.update(0);
 })();
 
+// Cross-fade to a clip. Restarting the one that's already running would reset a
+// held charge pose every frame, so a repeat request is a no-op.
+function playVm(name, fade = 0.12) {
+    const next = vmActions[name];
+    if (!next || next === vmCurrent) return;
+    next.reset().play();
+    if (vmCurrent) next.crossFadeFrom(vmCurrent, fade, false);
+    vmCurrent = next;
+}
+
+// Which cocked pose matches the buttons currently down. Mirrors the strength
+// mapping in the mouseup handler: both = medium, left = full, right = lob.
+function chargeClipFor(l, r) {
+    if (l && r) return 'charge_mid';
+    if (l) return 'charge_high';
+    if (r) return 'charge_low';
+    return null;
+}
+
+// Dev-only handles for poking the scene from the console or a script — posing the
+// viewmodel, playing a clip, dropping a smoke without having to throw one. Declared
+// down here so everything it closes over already exists (a const read from a live
+// module-eval block hits the temporal dead zone). Compiled out of prod builds.
+if (import.meta.env.DEV) {
+    window.__dev = {
+        vmBase, vmRot, vmEnv, gripPos, gripRot,
+        nade: () => grenadeInHand,
+        arms: () => viewmodel,
+        play: (name) => playVm(name, 0.1),
+        clips: () => Object.keys(vmActions),
+        // updateViewmodel only runs under pointer lock; this drives it by hand
+        tickVm: (dt) => updateViewmodel(dt),
+        spawnSmoke: (x, y, z) => grenades.createSmoke(new THREE.Vector3(x, y, z)),
+        clearSmokes: () => grenades.clearAllSmokes(),
+        // camera only tracks the player while playing, so outside pointer lock
+        // it can be flown around freely to look at things
+        camera, player, grenades,
+    };
+}
+
 function updateViewmodel(delta) {
-    if (!grenadeInHand || !grenadeInHand.visible) return;
+    if (!viewmodel) return;
+    vmMixer.update(delta);
+
+    // Charge pose while a throw button is held; the throw clip itself is fired
+    // from throwSmoke() on release, and draw/idle follow from there.
+    const want = chargeClipFor(leftHeld || touchWindup, rightHeld);
+    if (want && hasSmoke) playVm(want);
 
     // walk bob (classic CS-style figure-eight)
     const hSpeed = Math.hypot(player.velocity.x, player.velocity.z);
@@ -390,12 +517,25 @@ function updateViewmodel(delta) {
     sway.x += (THREE.MathUtils.clamp(yawDelta * 22, -1.4, 1.4) - sway.x) * Math.min(1, delta * 9);
     sway.y += (THREE.MathUtils.clamp(pitchDelta * 22, -1.4, 1.4) - sway.y) * Math.min(1, delta * 9);
 
-    grenadeInHand.position.set(
+    // Re-seated every frame so the Debug GUI can dial the grip in live; it's a
+    // constant offset inside an animated bone, not per-frame maths.
+    if (handBone && grenadeInHand) {
+        grenadeInHand.position.copy(gripPos);
+        grenadeInHand.quaternion.copy(nadeCancelQ)
+            .premultiply(_gripQ.setFromEuler(gripRot));
+    }
+
+    // Bob and sway move the whole rig — the arms' own motion is the clip's job.
+    viewmodel.position.set(
         vmBase.x + bobX + sway.x,
         vmBase.y + bobY + sway.y,
         vmBase.z
     );
-    grenadeInHand.rotation.set(vmRot.x + sway.y * 0.06, vmRot.y + sway.x * 0.08, vmRot.z + bobX * 0.04);
+    viewmodel.rotation.set(
+        vmRot.x + sway.y * 0.06,
+        vmRot.y + sway.x * 0.08,
+        vmRot.z + bobX * 0.04
+    );
 }
 const _vmEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 
@@ -506,10 +646,16 @@ function throwSmoke(strength) {
     grenades.throwGrenade(player.getEyePosition(_eye), _fwdH, sourcePitchDeg, strength, player.velocity);
 
     hasSmoke = false;
-    if (grenadeInHand) grenadeInHand.visible = false;
+    // Underhand for the lob, overhand for everything else — the same split the
+    // charge poses use. The canister leaves the hand partway through, so it's
+    // hidden for the follow-through rather than the whole cooldown.
+    playVm(strength === 0 ? 'throw_under' : 'throw_over', 0.06);
+    setTimeout(() => { if (grenadeInHand) grenadeInHand.visible = false; }, 180);
     setTimeout(() => {
         hasSmoke = true;
         if (grenadeInHand) grenadeInHand.visible = true;
+        playVm('draw', 0.05);
+        setTimeout(() => playVm('idle', 0.15), 500);
     }, 700);
 }
 
@@ -757,9 +903,12 @@ function setupMobileButtons() {
         }
     };
     press('btn-jump', () => { keys.space = true; }, () => { keys.space = false; });
-    press('btn-throw', () => {}, () => { if (gameState === 'playing') throwSmoke(1.0); });
-    press('btn-med', () => {}, () => { if (gameState === 'playing') throwSmoke(0.5); });
-    press('btn-lob', () => {}, () => { if (gameState === 'playing') throwSmoke(0.0); });
+    const throwBtn = (id, strength) => press(id,
+        () => { touchWindup = true; },
+        () => { touchWindup = false; if (gameState === 'playing') throwSmoke(strength); });
+    throwBtn('btn-throw', 1.0);
+    throwBtn('btn-med', 0.5);
+    throwBtn('btn-lob', 0.0);
     press('btn-clear', () => grenades.clearAllSmokes());
     press('btn-pause', () => { if (gameState === 'playing') pauseGame(); });
     press('btn-fly', () => { player.noclip = !player.noclip; $('btn-fly').classList.toggle('act', player.noclip); });
@@ -895,6 +1044,34 @@ nadeFolder.add(tuning, 'elasticity', 0.1, 0.9, 0.05).name('Elasticity (tangent)'
 nadeFolder.add(tuning, 'elasticityVert', 0.1, 0.9, 0.02).name('Elasticity (vert)');
 nadeFolder.add(tuning, 'velInherit', 0, 2, 0.05).name('Velocity Inherit');
 nadeFolder.close();
+// The grenade's rest pose is pure taste — dial it in live, then paste the
+// numbers back into vmBase/vmRot. updateViewmodel reads both every frame.
+const vmFolder = gui.addFolder('Viewmodel');
+vmFolder.add(vmBase, 'x', -20, 20, 0.1).name('Pos X');
+vmFolder.add(vmBase, 'y', -20, 20, 0.1).name('Pos Y');
+vmFolder.add(vmBase, 'z', -30, 0, 0.1).name('Pos Z (depth)');
+vmFolder.add(vmRot, 'x', -Math.PI, Math.PI, 0.01).name('Rot X');
+vmFolder.add(vmRot, 'y', -Math.PI, Math.PI, 0.01).name('Rot Y');
+vmFolder.add(vmRot, 'z', -Math.PI, Math.PI, 0.01).name('Rot Z');
+vmFolder.add({ scale: VM_SCALE }, 'scale', 5, 120, 0.5).name('Rig Scale')
+    .onChange((v) => viewmodel?.scale.setScalar(v));
+vmFolder.add(vmEnv, 'intensity', 0, 8, 0.1).name('Nade Env Intensity').onChange((v) => {
+    grenadeInHand?.traverse((o) => { if (o.isMesh) o.material.envMapIntensity = v; });
+});
+const gripFolder = vmFolder.addFolder('Grenade grip (in hand bone)');
+gripFolder.add(gripPos, 'x', -8, 8, 0.05).name('Pos X');
+gripFolder.add(gripPos, 'y', -8, 8, 0.05).name('Pos Y');
+gripFolder.add(gripPos, 'z', -8, 8, 0.05).name('Pos Z');
+gripFolder.add(gripRot, 'x', -Math.PI, Math.PI, 0.01).name('Rot X');
+gripFolder.add(gripRot, 'y', -Math.PI, Math.PI, 0.01).name('Rot Y');
+gripFolder.add(gripRot, 'z', -Math.PI, Math.PI, 0.01).name('Rot Z');
+vmFolder.add({ dump: () => {
+    const v3 = (v) => `${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)}`;
+    console.log(`vmBase:  ${v3(vmBase)}\nvmRot:   ${v3(vmRot)}`);
+    console.log(`gripPos: ${v3(gripPos)}\ngripRot: ${v3(gripRot)}`);
+} }, 'dump').name('Log values to console');
+vmFolder.close();
+
 const debugFolder = gui.addFolder('Debug');
 debugFolder.add({ collider: false }, 'collider').name('Show Collider').onChange((v) => {
     if (mapLoader.colliderVisualizer) mapLoader.colliderVisualizer.visible = v;
@@ -953,8 +1130,11 @@ function animate() {
             accumulator -= CS2.TICK;
         }
         player.getEyePosition(camera.position);
-        updateViewmodel(delta);
     }
+    // Outside the gate: the arms are visible behind the pause overlay, and until
+    // the mixer has run once they sit in the raw bind pose — a character-space
+    // T-pose that smears across the whole screen.
+    updateViewmodel(delta);
 
     grenades.update(delta);
 
