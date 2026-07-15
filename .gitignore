@@ -8,3 +8,4 @@ tools/cs2files/
 test-*.js
 test-*.cjs
 .claude/
+tools/export-phys/

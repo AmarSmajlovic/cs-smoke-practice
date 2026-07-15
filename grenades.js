@@ -154,21 +154,19 @@ export class GrenadeSystem {
                     }
                 }
 
-                // Floor bounces damp the vertical component slightly more than
-                // the classic uniform reflect (calibrated on the cs2utils
-                // window smoke chain against the game's real collision hulls:
-                // the hop must graze the corner block at -93 AND dip under the
-                // window header at -57 — a 2-unit vy window that pins the
-                // vertical restitution at ~0.38). Walls use the plain reflect.
+                // Bounce with incidence-dependent restitution: glancing hits
+                // (fast along the surface) rebound with the full 0.45, steep
+                // head-on drops crush their rebound (glance² falloff) — this
+                // is what makes rooftop drops die in small hops while skimming
+                // bounces carry, with one formula. Tangential always keeps
+                // 0.45 (Valve). Upward rebound additionally capped.
                 const into = vel.dot(_normal);
-                if (_normal.y > 0.7) {
-                    _bounceN.copy(_normal).multiplyScalar(into);
-                    _bounceT.copy(vel).sub(_bounceN);
-                    vel.copy(_bounceT).multiplyScalar(tuning.elasticity)
-                        .addScaledVector(_normal, -into * tuning.elasticityVert);
-                } else {
-                    vel.addScaledVector(_normal, -2 * into).multiplyScalar(tuning.elasticity);
-                }
+                _bounceN.copy(_normal).multiplyScalar(into);
+                _bounceT.copy(vel).sub(_bounceN);
+                const glance = Math.min(1, _bounceT.length() / Math.max(1, -into));
+                vel.copy(_bounceT).multiplyScalar(tuning.elasticity)
+                    .addScaledVector(_normal, -into * tuning.elasticity * glance * glance);
+                if (vel.y > CS2.nadeBounceVyCap) vel.y = CS2.nadeBounceVyCap;
 
                 const isFloor = _normal.y > 0.7;
                 const speed = vel.length();

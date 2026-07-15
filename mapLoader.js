@@ -378,6 +378,8 @@ export class MapLoader {
         root.updateMatrixWorld(true);
 
         const playerGeos = [], nadeGeos = [];
+        const nadeGroups = []; // { name, faceStart } — face ranges in merge order
+        let nadeFaces = 0;
         root.traverse((child) => {
             if (!child.isMesh || !child.geometry.attributes.position) return;
             let name = child.name, p = child.parent;
@@ -386,6 +388,7 @@ export class MapLoader {
             const isGrenadeClip = /grenadeclip/i.test(name);
             const isPlayerClip = /playerclip|npcclip/i.test(name);
             const isGlass = /group_glass/i.test(name);
+            const isSky = /physics_sky/i.test(name);
 
             const g = child.geometry.index ? child.geometry.toNonIndexed() : child.geometry;
             const src = g.attributes.position;
@@ -399,9 +402,34 @@ export class MapLoader {
             stripped.setAttribute('position', new THREE.BufferAttribute(arr, 3));
             stripped.applyMatrix4(child.matrixWorld);
 
-            if (!isGrenadeClip) playerGeos.push(stripped);
-            if (!isPlayerClip && !isGlass) nadeGeos.push(stripped);
+            // sky hulls stay grenade-only: the spawn raycast comes from above
+            // and would land the player ON the sky ceiling ("born in the air")
+            if (!isGrenadeClip && !isSky) playerGeos.push(stripped);
+            if (!isPlayerClip && !isGlass && !isSky) {
+                // unlimited sky: grenades never hit the ceiling — drop the
+                // invisible "world top" faces (~y 700) inside world groups too
+                let g2 = stripped;
+                const pos2 = stripped.attributes.position;
+                let hasHigh = false;
+                for (let i = 1; i < pos2.count * 3; i += 3) {
+                    if (pos2.array[i] > 650) { hasHigh = true; break; }
+                }
+                if (hasHigh) {
+                    const kept = [];
+                    for (let f = 0; f < pos2.count; f += 3) {
+                        const y0 = pos2.array[f * 3 + 1], y1 = pos2.array[f * 3 + 4], y2 = pos2.array[f * 3 + 7];
+                        if (y0 > 650 && y1 > 650 && y2 > 650) continue; // ceiling face
+                        for (let k = 0; k < 9; k++) kept.push(pos2.array[f * 3 + k]);
+                    }
+                    g2 = new THREE.BufferGeometry();
+                    g2.setAttribute('position', new THREE.BufferAttribute(new Float32Array(kept), 3));
+                }
+                nadeGeos.push(g2);
+                nadeGroups.push({ name: child.name, faceStart: nadeFaces });
+                nadeFaces += g2.attributes.position.count / 3;
+            }
         });
+        this.nadeGroups = nadeGroups;
 
         const buildMesh = (geos) => {
             const merged = mergeGeometries(geos, false);
@@ -426,14 +454,27 @@ export class MapLoader {
             `nade ${(this.nadeCollider.geometry.attributes.position.count / 3).toLocaleString()} tris`);
     }
 
-    // Raycast for GRENADES: the game's grenade collision when available
+    // Raycast for GRENADES: the game's grenade collision when available.
+    // The hit gets .surfaceGroup (physics_group_* name) for per-surface
+    // elasticity, resolved from the merged geometry's face ranges.
     raycastNade(origin, direction, far) {
         if (!this.nadeCollider) return this.raycast(origin, direction, far);
         _raycaster.set(origin, direction);
         _raycaster.far = far;
         _raycaster.firstHitOnly = true;
         const hits = _raycaster.intersectObject(this.nadeCollider);
-        return hits.length ? hits[0] : null;
+        if (!hits.length) return null;
+        const hit = hits[0];
+        if (this.nadeGroups && hit.faceIndex !== undefined) {
+            let lo = 0, hi = this.nadeGroups.length - 1;
+            while (lo < hi) {
+                const mid = (lo + hi + 1) >> 1;
+                if (this.nadeGroups[mid].faceStart <= hit.faceIndex) lo = mid;
+                else hi = mid - 1;
+            }
+            hit.surfaceGroup = this.nadeGroups[lo].name;
+        }
+        return hit;
     }
 
     // Raycast helper against the collider. Returns first hit or null.

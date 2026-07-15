@@ -180,10 +180,13 @@ function findSpawn() {
     const box = new THREE.Box3().setFromObject(map);
     const down = new THREE.Vector3(0, -1, 0);
 
-    // Preferred: real spawn location for the chosen side
+    // Preferred: real spawn location for the chosen side. The ray uses the
+    // GRENADE collider (no player clips — those roof the spawns in the game
+    // hulls) and starts below the sky plane.
     const s = mapDef.spawns && mapDef.spawns[spawnChoice];
     if (s) {
-        const hit = mapLoader.raycast(new THREE.Vector3(s.x, box.max.y + 10, s.z), down, box.max.y - box.min.y + 20);
+        const startY = Math.min(box.max.y + 10, 400);
+        const hit = mapLoader.raycastNade(new THREE.Vector3(s.x, startY, s.z), down, startY - box.min.y + 20);
         if (hit) {
             spawnPoint.set(s.x, hit.point.y + 2, s.z);
             console.log(`Spawn ${spawnChoice}:`, spawnPoint.x.toFixed(0), spawnPoint.y.toFixed(0), spawnPoint.z.toFixed(0));
@@ -548,6 +551,13 @@ function tickScriptedJumpthrow() {
         : jt.airTicks >= 2; // 2nd airborne tick lands the cs2utils window
                             // reference bounce within 5u (1 tick flies ~40u long)
     if (ready) {
+        if (jt.mode === 'bind') {
+            // CS2 subtick emulation: the bind releases at an exact time after
+            // the jump, between our 64Hz ticks — use the exact inherited
+            // velocity for the throw (the jump itself continues unaffected
+            // apart from a sub-unit correction)
+            player.velocity.y = CS2.jumpImpulse - CS2.gravity * CS2.jumpthrowReleaseTime;
+        }
         throwSmoke(jt.strength);
         pendingJT = null;
         setTimeout(() => { keys.space = false; }, 120);

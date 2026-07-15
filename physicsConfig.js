@@ -25,21 +25,29 @@ export const CS2 = {
     eyeStand: 64.093,
     eyeCrouch: 46.076,
 
-    // Grenade projectile
-    nadeBaseThrowSpeed: 675,    // 750 (weapon ThrowVelocity) * 0.9
+    // Grenade projectile — speed/bias calibrated on the csnades "Stairs from
+    // A Ramp" reference (standing Left Click, machine setpos): it pins the
+    // throw speed with no jump-inherit degeneracy. First touch lands 10u,
+    // rest 15u from reference with 685/bias 8.
+    nadeBaseThrowSpeed: 685,    // CSGO code says 750*0.9=675; CS2 measures ~685 on two machine references (stairs 11u, ramp roof 2u)
     nadeGravityScale: 0.4,      // grenade projectiles use 0.4 * sv_gravity
     nadeElasticity: 0.45,       // bounce: tangential (along-surface) speed kept
-    nadeElasticityVert: 0.38,   // bounce: normal (out of surface) restitution —
-                                // lower than tangential; calibrated against the
-                                // cs2utils window smoke trail (low hop over the
-                                // box after the ledge bounce)
-    nadeVelInherit: 1.0,        // player velocity added to the throw. CSGO used
+    nadeElasticityVert: 0.45,  // uniform per Valve code (kept as a GUI knob)   // bounce: normal (out of surface) restitution
+    // CS2 is subtick: a jumpthrow bind releases ~60ms after the jump, between
+    // our 64Hz ticks — the scripted jumpthrow uses this exact time for the
+    // inherited velocity (calibrated on the cs2utils window smoke)
+    jumpthrowReleaseTime: 0.125,
+    nadeVelInherit: 1.25,        // player velocity added to the throw. CSGO used
                                 // 1.25; CS2 nerfed it — calibrated against the
                                 // cs2utils window jumpthrow (first touch lands
                                 // 5u from reference with 1.0 + instant release)
+    nadeBounceVyCap: 200,       // max upward speed after a bounce — Source
+                                // grenades never rebound high even from huge
+                                // falls ("3 small hops" on rooftop landings)
     nadeRadius: 2,              // projectile collision radius
     nadeSpawnForward: 16,       // spawn distance in front of the eyes
-    nadePitchBias: 10,          // degrees thrown above the crosshair when aiming level
+    nadePitchBias: 10,           // degrees thrown above the crosshair when aiming
+                                // level (calibrated with the throw speed)
 
     // Smoke cloud
     smokeRadius: 144,
