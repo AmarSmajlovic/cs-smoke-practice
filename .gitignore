@@ -10,3 +10,10 @@ test-*.cjs
 .claude/
 tools/export-phys/
 tools/exceptions.txt
+
+# CS2 demos and derived physics-test artifacts (regenerate with tools/demo-extract.py + demo-traj)
+public/demos/
+tools/*.dem
+tools/smoke_traj.json
+tools/demo-traj/demotraj
+tools/players.csv

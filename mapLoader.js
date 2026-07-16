@@ -372,9 +372,14 @@ export class MapLoader {
     //   - physics_ladder_*                    : neither (ladder zones handle it)
     //   - physics_group_glass                 : players only (nades smash through)
     async buildGameCollision(path) {
-        const t0 = performance.now();
         const gltf = await this.loader.loadAsync(path);
-        const root = gltf.scene;
+        this.buildGameCollisionFromRoot(gltf.scene);
+    }
+
+    // Split out from buildGameCollision so the headless physics tests can feed
+    // in a GLB parsed off disk and exercise the exact collision the game uses.
+    buildGameCollisionFromRoot(root) {
+        const t0 = performance.now();
         root.updateMatrixWorld(true);
 
         const playerGeos = [], nadeGeos = [];
