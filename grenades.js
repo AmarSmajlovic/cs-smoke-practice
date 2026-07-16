@@ -185,18 +185,20 @@ export class GrenadeSystem {
                     }
                 }
 
-                // Bounce with incidence-dependent restitution: glancing hits
-                // (fast along the surface) rebound with the full 0.45, steep
-                // head-on drops crush their rebound (glance² falloff) — this
-                // is what makes rooftop drops die in small hops while skimming
-                // bounces carry, with one formula. Tangential always keeps
-                // 0.45 (Valve). Upward rebound additionally capped.
+                // Split restitution: tangential (along-surface) speed keeps
+                // `elasticity`, normal (out-of-surface) speed keeps
+                // `elasticityVert`. Both measured at ~0.45 off 361 real demo
+                // bounces, and — crucially — the normal ratio is flat across
+                // impact angle: steep head-on drops rebound with the same 0.44
+                // as glancing skims. An earlier glance² falloff crushed steep
+                // rebounds to near zero and threw high/lobbed lineups long; the
+                // upward cap alone (real rebound tops out ~236 u/s) is what
+                // keeps rooftop drops to small hops.
                 const into = vel.dot(_normal);
                 _bounceN.copy(_normal).multiplyScalar(into);
                 _bounceT.copy(vel).sub(_bounceN);
-                const glance = Math.min(1, _bounceT.length() / Math.max(1, -into));
                 vel.copy(_bounceT).multiplyScalar(tuning.elasticity)
-                    .addScaledVector(_normal, -into * tuning.elasticity * glance * glance);
+                    .addScaledVector(_normal, -into * tuning.elasticityVert);
                 if (vel.y > CS2.nadeBounceVyCap) vel.y = CS2.nadeBounceVyCap;
 
                 const isFloor = _normal.y > 0.7;
