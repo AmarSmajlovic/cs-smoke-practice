@@ -42,16 +42,21 @@ export const CS2 = {
     nadeGravityScale: 0.4,      // grenade projectiles use 0.4 * sv_gravity
     nadeElasticity: 0.45,       // bounce: tangential (along-surface) speed kept
     nadeElasticityVert: 0.45,  // uniform per Valve code (kept as a GUI knob)   // bounce: normal (out of surface) restitution
-    // CS2 is subtick: a jumpthrow bind releases ~60ms after the jump, between
-    // our 64Hz ticks — the scripted jumpthrow uses this exact time for the
-    // inherited velocity (calibrated on the cs2utils window smoke)
-    jumpthrowReleaseTime: 0.125,
-    nadeVelInherit: 1.3,         // player velocity added to the throw. Measured
-                                // at 1.3 across 113 jumpthrows in 4 demos: with
-                                // it, the launch velocity minus inherit*vPlayer
-                                // clusters tightest on the 685 throw speed. Also
-                                // nudges moving throws 28u->24u; standing
-                                // unaffected (vPlayer~0).
+    // Inherited player velocity: uniform 1.25 (Valve's constant). Confirmed
+    // two independent ways on the demo launch velocities: 98 moving ground
+    // throws pin the horizontal at 1.25 (12 u/s median, sharp minimum), and
+    // the 113 jumpthrows' vertical boost of ~257 u/s is exactly
+    // 1.25 * (jumpImpulse - gravity * 0.1225) — i.e. the same 1.25 applied to
+    // the player's velocity at the release moment.
+    nadeVelInheritH: 1.25,
+    nadeVelInheritZ: 1.25,
+    // A jumpthrow bind releases ~0.1225s after the jump input (measured by
+    // back-integrating demo trajectories to their spawn: release sits
+    // ~96-123ms after the jump; landing error is minimized at 0.1225-0.125).
+    // BOTH the spawn position and the inherited velocity come from the player
+    // state at this moment. Landing validation across 113 demo jumpthrows:
+    // median 27u (was 256u with the old model).
+    jumpthrowReleaseTime: 0.1225,
     nadeBounceVyCap: 200,       // max upward speed after a bounce — Source
                                 // grenades never rebound high even from huge
                                 // falls ("3 small hops" on rooftop landings)
@@ -71,5 +76,6 @@ export const tuning = {
     nadeGravityScale: CS2.nadeGravityScale,
     elasticity: CS2.nadeElasticity,
     elasticityVert: CS2.nadeElasticityVert,
-    velInherit: CS2.nadeVelInherit,
+    velInheritH: CS2.nadeVelInheritH,
+    velInheritZ: CS2.nadeVelInheritZ,
 };

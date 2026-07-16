@@ -407,12 +407,16 @@ export class MapLoader {
             stripped.setAttribute('position', new THREE.BufferAttribute(arr, 3));
             stripped.applyMatrix4(child.matrixWorld);
 
-            // sky hulls stay grenade-only: the spawn raycast comes from above
-            // and would land the player ON the sky ceiling ("born in the air")
+            // sky hulls are solid for NOBODY here: 57 of 392 real demo smoke
+            // trajectories fly straight through the physics_sky mesh (crossings
+            // cluster at its z=704 ceiling layer), so CS2 grenades don't
+            // collide with it — and a player spawn raycast from above would
+            // otherwise land ON the sky ("born in the air").
             if (!isGrenadeClip && !isSky) playerGeos.push(stripped);
             if (!isPlayerClip && !isGlass && !isSky) {
-                // unlimited sky: grenades never hit the ceiling — drop the
-                // invisible "world top" faces (~y 700) inside world groups too
+                // same story for the invisible "world top" faces (~y 700)
+                // hiding inside regular world groups — real smokes cross that
+                // height band freely, so drop those faces from the collider
                 let g2 = stripped;
                 const pos2 = stripped.attributes.position;
                 let hasHigh = false;

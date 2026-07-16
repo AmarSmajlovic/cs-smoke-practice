@@ -62,8 +62,20 @@ async function main() {
     const results = [];
     const tSim = performance.now();
     for (const p of pairs) {
-        const eye = toApp(p.px, p.py, p.pz).setY(p.pz + CS2.eyeStand);
-        const vel = toApp(p.vx, p.vy, p.vz);
+        // Jumpthrows release 0.1225s after the jump input, not at the
+        // grenade_thrown event tick — walk the arc to the release moment
+        // (same reconstruction as harness.mjs throwFrom).
+        let px = p.px, py = p.py, pz = p.pz, vz = p.vz;
+        if (p.vz > 100 && p.vz < CS2.jumpImpulse) {
+            const vzRel = CS2.jumpImpulse - CS2.gravity * CS2.jumpthrowReleaseTime;
+            const dt = (vzRel - p.vz) / CS2.gravity;
+            px -= p.vx * dt;
+            py -= p.vy * dt;
+            pz -= (p.vz + vzRel) * 0.5 * dt;
+            vz = vzRel;
+        }
+        const eye = toApp(px, py, pz).setY(pz + CS2.eyeStand);
+        const vel = toApp(p.vx, p.vy, vz);
         const want = toApp(p.dx, p.dy, p.dz);
         const yaw = THREE.MathUtils.degToRad(p.yaw);
         const fwdH = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));

@@ -32,20 +32,25 @@ scene.background = new THREE.Color(0x87ceeb);
 const camera = new THREE.PerspectiveCamera(73.74, window.innerWidth / window.innerHeight, 1, 30000);
 scene.add(camera);
 
-// Viewport locked to 16:9 (letterboxed) so the view matches CS2 videos and
-// screenshots 1:1 regardless of the window shape — vertical FOV fixed at
-// 73.74 (90 horizontal at 4:3), exactly like the game.
+// Fullscreen viewport, CS2 behaviour: vertical FOV is fixed at 73.74 (the
+// game's 90° horizontal at 4:3) and the horizontal view grows with a wider
+// window (hor+), exactly like CS2 on wide monitors — no letterboxing. On a
+// portrait window the vertical FOV opens up instead so the horizontal view
+// never drops below the 4:3 game view.
 function applyFov() {
     const W = window.innerWidth, H = window.innerHeight;
-    let w = W, h = Math.round(W * 9 / 16);
-    if (h > H) { h = H; w = Math.round(H * 16 / 9); }
-    renderer.setSize(w, h);
+    renderer.setSize(W, H);
     const el = renderer.domElement;
     el.style.position = 'absolute';
-    el.style.left = ((W - w) / 2) + 'px';
-    el.style.top = ((H - h) / 2) + 'px';
-    camera.aspect = 16 / 9;
-    camera.fov = 73.74;
+    el.style.left = '0px';
+    el.style.top = '0px';
+    camera.aspect = W / H;
+    const MIN_H_FOV = THREE.MathUtils.degToRad(90); // CS2 horizontal at 4:3
+    const vFov = THREE.MathUtils.degToRad(73.74);
+    const hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect);
+    camera.fov = hFov >= MIN_H_FOV
+        ? 73.74
+        : THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(MIN_H_FOV / 2) / camera.aspect));
     camera.updateProjectionMatrix();
 }
 
@@ -621,7 +626,7 @@ const _fwdFull = new THREE.Vector3();
 const _right = new THREE.Vector3();
 const _eye = new THREE.Vector3();
 
-function throwSmoke(strength) {
+function throwSmoke(strength, throwVel = player.velocity) {
     if (!hasSmoke) return;
     _euler.setFromQuaternion(camera.quaternion);
     const sourcePitchDeg = -THREE.MathUtils.radToDeg(_euler.x); // Source: + is down
@@ -643,7 +648,7 @@ function throwSmoke(strength) {
     };
     $('lu-save').disabled = false;
 
-    grenades.throwGrenade(player.getEyePosition(_eye), _fwdH, sourcePitchDeg, strength, player.velocity);
+    grenades.throwGrenade(player.getEyePosition(_eye), _fwdH, sourcePitchDeg, strength, throwVel);
 
     hasSmoke = false;
     // Underhand for the lob, overhand for everything else — the same split the
@@ -670,6 +675,7 @@ function throwSmoke(strength) {
 // The release itself happens inside tickPhysics (see below) so the timing
 // is deterministic in ticks, like a CS2 bind — not frame-rate dependent.
 let pendingJT = null;
+const _jtVel = new THREE.Vector3();
 function scriptedJumpthrow(mode = 'bind', e = null) {
     if (gameState !== 'playing' || !hasSmoke || pendingJT) return;
     const strength = (e?.shiftKey || (leftHeld && rightHeld)) ? 0.5
@@ -694,17 +700,19 @@ function tickScriptedJumpthrow() {
     jt.airTicks++;
     const ready = jt.mode === 'peak'
         ? player.velocity.y <= 20
-        : jt.airTicks >= 2; // 2nd airborne tick lands the cs2utils window
-                            // reference bounce within 5u (1 tick flies ~40u long)
+        : jt.airTicks >= Math.round(CS2.jumpthrowReleaseTime * 64);
     if (ready) {
         if (jt.mode === 'bind') {
-            // CS2 subtick emulation: the bind releases at an exact time after
-            // the jump, between our 64Hz ticks — use the exact inherited
-            // velocity for the throw (the jump itself continues unaffected
-            // apart from a sub-unit correction)
-            player.velocity.y = CS2.jumpImpulse - CS2.gravity * CS2.jumpthrowReleaseTime;
+            // A CS2 jumpthrow bind releases 0.1225s after the jump input
+            // (demo-calibrated). We're on the nearest 64Hz tick — pass the
+            // exact release-moment velocity for determinism; the player's
+            // own arc continues untouched.
+            _jtVel.copy(player.velocity)
+                .setY(CS2.jumpImpulse - CS2.gravity * CS2.jumpthrowReleaseTime);
+            throwSmoke(jt.strength, _jtVel);
+        } else {
+            throwSmoke(jt.strength);
         }
-        throwSmoke(jt.strength);
         pendingJT = null;
         setTimeout(() => { keys.space = false; }, 120);
     }
@@ -1042,7 +1050,8 @@ nadeFolder.add(tuning, 'throwSpeed', 400, 900, 5).name('Throw Speed (u/s)');
 nadeFolder.add(tuning, 'nadeGravityScale', 0.2, 1.0, 0.05).name('Gravity Scale');
 nadeFolder.add(tuning, 'elasticity', 0.1, 0.9, 0.05).name('Elasticity (tangent)');
 nadeFolder.add(tuning, 'elasticityVert', 0.1, 0.9, 0.02).name('Elasticity (vert)');
-nadeFolder.add(tuning, 'velInherit', 0, 2, 0.05).name('Velocity Inherit');
+nadeFolder.add(tuning, 'velInheritH', 0, 2, 0.05).name('Vel Inherit H');
+nadeFolder.add(tuning, 'velInheritZ', 0, 2, 0.05).name('Vel Inherit Z');
 nadeFolder.close();
 // The grenade's rest pose is pure taste — dial it in live, then paste the
 // numbers back into vmBase/vmRot. updateViewmodel reads both every frame.
@@ -1118,6 +1127,15 @@ function tickPhysics(dt) {
 
 const playingNow = () => gameState === 'playing' && (isMobile || controls.isLocked);
 
+// Standing inside a smoke, CS2 shows a near-solid grey wash — billboard puffs
+// alone always leave see-through gaps at point-blank range. A fullscreen
+// overlay driven by how deep the camera sits inside the nearest cloud.
+const smokeFog = document.createElement('div');
+smokeFog.id = 'smoke-fog';
+smokeFog.style.cssText =
+    'position:fixed;inset:0;pointer-events:none;background:#c7c7c5;opacity:0;z-index:5';
+document.body.appendChild(smokeFog);
+
 function animate() {
     requestAnimationFrame(animate);
     const delta = Math.min(clock.getDelta(), 0.1);
@@ -1137,6 +1155,7 @@ function animate() {
     updateViewmodel(delta);
 
     grenades.update(delta);
+    smokeFog.style.opacity = (grenades.smokeFogDensity(camera.position) * 0.97).toFixed(3);
 
     if (frameCount % 10 === 0 && posDisplay && map) {
         const hSpeed = Math.hypot(player.velocity.x, player.velocity.z);
@@ -1164,6 +1183,6 @@ animate();
 window.__debug = { player, mapLoader, grenades, CS2, tuning, camera, THREE, startGame, solveAim, placeAimTarget, solveAimFromHere, lineupHelper };
 
 window.addEventListener('resize', () => {
-    applyFov(); // also sizes + letterboxes the canvas
+    applyFov(); // also sizes the canvas (fullscreen, hor+ FOV)
     updateOrientationClass();
 });
