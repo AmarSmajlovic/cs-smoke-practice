@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { MapLoader } from '../mapLoader.js';
@@ -41,6 +41,17 @@ export async function buildHarness() {
     const grenades = new GrenadeSystem(scene, mapLoader);
     const pairs = JSON.parse(readFileSync(join(ROOT, 'tools/mirage_pairs.json'), 'utf8'));
     return { grenades, pairs };
+}
+
+// Every demo's pairs merged, when one demo's ~30 jumpthrows aren't enough.
+// Falls back to the committed single-demo set if demo-data/ isn't populated.
+export function loadAllPairs() {
+    const dir = join(ROOT, 'tools/demo-data');
+    if (!existsSync(dir)) return JSON.parse(readFileSync(join(ROOT, 'tools/mirage_pairs.json'), 'utf8'));
+    const out = [];
+    for (const f of readdirSync(dir).filter((f) => f.endsWith('.pairs.json')))
+        out.push(...JSON.parse(readFileSync(join(dir, f), 'utf8')));
+    return out;
 }
 
 // Reconstruct the throw as CS2 saw it. `grenade_thrown` fires when the animation

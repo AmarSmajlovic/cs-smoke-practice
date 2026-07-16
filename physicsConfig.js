@@ -46,10 +46,12 @@ export const CS2 = {
     // our 64Hz ticks — the scripted jumpthrow uses this exact time for the
     // inherited velocity (calibrated on the cs2utils window smoke)
     jumpthrowReleaseTime: 0.125,
-    nadeVelInherit: 1.25,        // player velocity added to the throw. CSGO used
-                                // 1.25; CS2 nerfed it — calibrated against the
-                                // cs2utils window jumpthrow (first touch lands
-                                // 5u from reference with 1.0 + instant release)
+    nadeVelInherit: 1.3,         // player velocity added to the throw. Measured
+                                // at 1.3 across 113 jumpthrows in 4 demos: with
+                                // it, the launch velocity minus inherit*vPlayer
+                                // clusters tightest on the 685 throw speed. Also
+                                // nudges moving throws 28u->24u; standing
+                                // unaffected (vPlayer~0).
     nadeBounceVyCap: 200,       // max upward speed after a bounce — Source
                                 // grenades never rebound high even from huge
                                 // falls ("3 small hops" on rooftop landings)
