@@ -11,12 +11,20 @@ const SMOKE_VERT_HEAD = `
     uniform float uBloom;
     uniform float uTime;
     uniform float uFloorY;
+    uniform float uRadius;
     attribute vec3 aOffset;
     attribute vec2 aSwirl;
 `;
+// CS2 expansion: the cloud ROLLS outward from the detonation point — inner
+// particles are in place immediately, the rim billows out last. Each particle
+// eases along its own offset with a delay proportional to how far out it
+// lives, driven by one linear uBloom 0->1.
 const SMOKE_VERT_BODY = `
     float swirl = sin(uTime * aSwirl.y + aSwirl.x) * 6.0;
-    vec3 transformed = uCenter + aOffset * uBloom;
+    float rf = clamp(length(aOffset) / uRadius, 0.0, 1.0);
+    float b = clamp((uBloom - rf * 0.45) / 0.55, 0.0, 1.0);
+    b = 1.0 - pow(1.0 - b, 2.0);
+    vec3 transformed = uCenter + aOffset * b;
     transformed.y = max(transformed.y, uFloorY);
     transformed.x += swirl;
     transformed.z -= swirl;
@@ -79,7 +87,9 @@ export class GrenadeSystem {
 
     // CS2 throw math: pitch biased up to 10° above the crosshair, speed scaled
     // by throw strength (1 = left click, 0.5 = both, 0 = right click), plus
-    // 1.25x of the player's current velocity (this IS the jumpthrow).
+    // the player's velocity inherited per axis (1.05 horizontal / 0.85
+    // vertical — fitted on real demo launch velocities). For a jumpthrow the
+    // caller passes the velocity at the jump subtick (vy = full jumpImpulse).
     computeThrow(eyePos, viewForwardHorizontal, sourcePitchDeg, strength, playerVelocity, outPos, outVel) {
         let pitch = THREE.MathUtils.clamp(sourcePitchDeg, -90, 90);
         pitch -= CS2.nadePitchBias * (90 - Math.abs(pitch)) / 90;
@@ -90,7 +100,10 @@ export class GrenadeSystem {
         _dir.normalize();
 
         const speed = tuning.throwSpeed * (0.3 + 0.7 * strength);
-        outVel.copy(_dir).multiplyScalar(speed).addScaledVector(playerVelocity, tuning.velInherit);
+        outVel.copy(_dir).multiplyScalar(speed);
+        outVel.x += tuning.velInheritH * playerVelocity.x;
+        outVel.z += tuning.velInheritH * playerVelocity.z;
+        outVel.y += tuning.velInheritZ * playerVelocity.y;
         outPos.copy(eyePos).addScaledVector(_dir, CS2.nadeSpawnForward);
     }
 
@@ -317,6 +330,9 @@ export class GrenadeSystem {
         _rand.set(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1);
         _rand.addScaledVector(n, -_rand.dot(n));
         _tan.addScaledVector(_rand, 0.6);
+        // Smoke leaning on a vertical wall CLIMBS it (CS2: the cloud visibly
+        // runs up the face, not just sideways along it) — bias the slide up.
+        if (Math.abs(n.y) < 0.5) _tan.y += 0.8 + Math.random() * 0.6;
         if (_tan.lengthSq() < 1e-6) return out;
         _tan.normalize();
 
@@ -336,7 +352,7 @@ export class GrenadeSystem {
 
         // cloud center floats above the detonation point; bottom fills to floor
         const center = groundPos.clone();
-        center.y += CS2.smokeRadius * 0.4;
+        center.y += CS2.smokeRadius * 0.34;
         const R = CS2.smokeRadius;
 
         // rMin/rMax carve out the shell a layer lives in, as a fraction of R:
@@ -346,6 +362,8 @@ export class GrenadeSystem {
             const positions = new Float32Array(count * 3);
             const offsets = new Float32Array(count * 3);
             const swirls = new Float32Array(count * 2);
+            const colors = new Float32Array(count * 3);
+            const tint = new THREE.Color(color);
 
             for (let i = 0; i < count; i++) {
                 _dir.set(
@@ -357,6 +375,20 @@ export class GrenadeSystem {
                 const target = R * rMax * Math.cbrt(rMin + (1 - rMin) * Math.random());
                 this.reachThroughWorld(center, _dir, target, _off);
 
+                // Ground skirt: reach that would dive below the floor spills
+                // OUTWARD along it instead — CS2 smoke sits on the ground and
+                // spreads, it doesn't get sliced into a flat underside.
+                const below = (groundPos.y + 4) - (center.y + _off.y);
+                if (below > 0) {
+                    // keep a little sag so the underside isn't a laser-flat
+                    // plane, and spread wide — the skirt is what sells contact
+                    _off.y += below - Math.random() * 10;
+                    const h = Math.hypot(_off.x, _off.z) || 1;
+                    const push = below * (0.8 + Math.random() * 0.7);
+                    _off.x += (_off.x / h) * push;
+                    _off.z += (_off.z / h) * push;
+                }
+
                 offsets[i * 3] = _off.x;
                 offsets[i * 3 + 1] = _off.y;
                 offsets[i * 3 + 2] = _off.z;
@@ -367,24 +399,37 @@ export class GrenadeSystem {
                 positions[i * 3] = center.x;
                 positions[i * 3 + 1] = groundPos.y + 2;
                 positions[i * 3 + 2] = center.z;
+
+                // CS2's volumetric read comes from self-shadowing: a bright
+                // crown up top, dusk in the underbelly and the packed middle.
+                // Bake that per particle — lit by height, opened up by radius.
+                const rN = _off.length() / R;
+                const hN = THREE.MathUtils.clamp(_off.y / (R * 0.62), -1, 1.4);
+                const shade = Math.min(
+                    0.60 + 0.14 * rN + 0.22 * (hN * 0.5 + 0.5) + Math.random() * 0.05, 1.0);
+                colors[i * 3] = Math.min(tint.r * shade, 1);
+                colors[i * 3 + 1] = Math.min(tint.g * shade, 1);
+                colors[i * 3 + 2] = Math.min(tint.b * shade, 1);
             }
 
             const geometry = new THREE.BufferGeometry();
             geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
             geometry.setAttribute('aOffset', new THREE.BufferAttribute(offsets, 3));
             geometry.setAttribute('aSwirl', new THREE.BufferAttribute(swirls, 2));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
             // Every position is the centre, so an automatic bounding sphere would
             // be a point and the cloud would pop out of view the moment its centre
             // left the frustum. Cover the real extent by hand.
             geometry.boundingSphere = new THREE.Sphere(center.clone(), R * 1.5);
 
             const material = new THREE.PointsMaterial({
-                color, size,
+                size,
                 map: getSmokeSprite(),
                 transparent: true,
                 opacity,
                 depthWrite: false,
                 sizeAttenuation: true,
+                vertexColors: true, // per-particle shade baked above
             });
 
             const layer = { baseOpacity: opacity, shader: null };
@@ -393,6 +438,7 @@ export class GrenadeSystem {
                 shader.uniforms.uBloom = { value: 0 };
                 shader.uniforms.uTime = { value: 0 };
                 shader.uniforms.uFloorY = { value: groundPos.y + 2 };
+                shader.uniforms.uRadius = { value: R };
                 shader.vertexShader = SMOKE_VERT_HEAD + shader.vertexShader
                     .replace('#include <begin_vertex>', SMOKE_VERT_BODY);
                 layer.shader = shader;
@@ -408,11 +454,12 @@ export class GrenadeSystem {
         // CS2 smoke is a near-neutral grey-white mass, not a cream haze. Three
         // layers so the cloud is opaque through the middle but still breaks up
         // at the rim: a packed core that kills all see-through, the body that
-        // sets the silhouette, and darker detail puffs for shading.
+        // sets the silhouette, and finer detail puffs that give the surface
+        // its billow texture (shading itself is baked per particle).
         const layers = [
-            makeLayer(200, 150, 1.0, 0xdedede, 0.0, 0.62),  // packed opaque core
-            makeLayer(420, 120, 0.98, 0xd4d4d2, 0.10),      // body / silhouette
-            makeLayer(330, 62, 0.92, 0xb2b2b0, 0.34),       // darker rim detail
+            makeLayer(240, 145, 1.0, 0xd8d8d5, 0.0, 0.62),  // packed opaque core
+            makeLayer(700, 110, 0.98, 0xcfcfcb, 0.10),      // body / silhouette
+            makeLayer(400, 60, 0.92, 0xc6c6c2, 0.30),       // billow detail lumps
         ];
 
         this.smokes.push({
@@ -433,10 +480,13 @@ export class GrenadeSystem {
             }
 
             smoke.time += delta;
-            // Fast bloom like CS2: ~90% expanded within the first second
-            const bloom = 1 - Math.pow(1 - Math.min(elapsed / 1100, 1), 3);
+            // Linear ramp; the vertex shader staggers it per particle so the
+            // cloud rolls outward CS2-style — core instant, rim done by ~1s
+            const bloom = Math.min(elapsed / 1000, 1);
             const fadeStart = CS2.smokeDurationMs - 3000;
             const fade = elapsed > fadeStart ? 1 - (elapsed - fadeStart) / 3000 : 1;
+            smoke.bloom = bloom;
+            smoke.fade = fade;
 
             for (const layer of smoke.layers) {
                 // null until the material has compiled — the cloud just sits
@@ -448,6 +498,26 @@ export class GrenadeSystem {
                 layer.material.opacity = layer.baseOpacity * fade;
             }
         }
+    }
+
+    // How deep inside a smoke the given point is, 0..1 — drives the full-view
+    // fog when the CAMERA is inside a cloud. From within, CS2 smoke reads as a
+    // near-solid grey wash; sparse billboard puffs alone leave see-through
+    // gaps at point-blank range no particle count can close.
+    smokeFogDensity(pos) {
+        let f = 0;
+        const R = CS2.smokeRadius;
+        for (const s of this.smokes) {
+            if (!s.bloom) continue;
+            const dx = pos.x - s.center.x;
+            const dy = (pos.y - s.center.y) / 0.62; // cloud is a squashed ball
+            const dz = pos.z - s.center.z;
+            const d = Math.sqrt(dx * dx + dy * dy + dz * dz) / (R * s.bloom);
+            // 0 at the rim, 1 once ~35% deep
+            const k = THREE.MathUtils.clamp((1 - d) / 0.35, 0, 1);
+            f = Math.max(f, k * s.fade);
+        }
+        return f;
     }
 
     removeSmoke(smoke) {

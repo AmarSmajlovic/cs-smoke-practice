@@ -54,15 +54,24 @@ export function loadAllPairs() {
     return out;
 }
 
-// Reconstruct the throw as CS2 saw it. `grenade_thrown` fires when the animation
-// starts, but the grenade leaves the hand `release` seconds later — during a
-// jump that is decisive, since gravity moves the player's vertical velocity by
-// 100 u/s every 0.125s. Advance the player along their own ballistic arc first.
+// Reconstruct the throw as CS2 saw it. A jumpthrow releases 0.1225s after the
+// jump input, which is NOT the `grenade_thrown` event tick — walk the player's
+// ballistic arc from the event state to the release moment (vz = jumpImpulse -
+// gravity * releaseTime, position moved accordingly; dt may go either way).
+// For ground throws the event-tick state is used as-is (release only matters
+// when the player velocity is large, i.e. mid-jump).
 const _eye = new THREE.Vector3(), _vel = new THREE.Vector3();
 export function throwFrom(p, release) {
     _vel.set(p.vx, p.vy, p.vz);
     _eye.set(p.px, p.py, p.pz);
-    if (release > 0) {
+    if (p.vz > 100 && p.vz < CS2.jumpImpulse) {
+        const vzRel = CS2.jumpImpulse - CS2.gravity * CS2.jumpthrowReleaseTime;
+        const dt = (vzRel - p.vz) / CS2.gravity;
+        _eye.x -= p.vx * dt;
+        _eye.y -= p.vy * dt;
+        _eye.z -= (p.vz + vzRel) * 0.5 * dt;
+        _vel.z = vzRel;
+    } else if (release > 0) {
         _eye.addScaledVector(_vel, release);
         _eye.z -= 0.5 * CS2.gravity * release * release;
         _vel.z -= CS2.gravity * release;
