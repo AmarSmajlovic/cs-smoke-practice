@@ -626,7 +626,7 @@ const _fwdFull = new THREE.Vector3();
 const _right = new THREE.Vector3();
 const _eye = new THREE.Vector3();
 
-function throwSmoke(strength, throwVel = player.velocity) {
+function throwSmoke(strength, throwVel = player.velocity, eyeOverride = null) {
     if (!hasSmoke) return;
     _euler.setFromQuaternion(camera.quaternion);
     const sourcePitchDeg = -THREE.MathUtils.radToDeg(_euler.x); // Source: + is down
@@ -648,7 +648,7 @@ function throwSmoke(strength, throwVel = player.velocity) {
     };
     $('lu-save').disabled = false;
 
-    grenades.throwGrenade(player.getEyePosition(_eye), _fwdH, sourcePitchDeg, strength, throwVel);
+    grenades.throwGrenade(eyeOverride || player.getEyePosition(_eye), _fwdH, sourcePitchDeg, strength, throwVel);
 
     hasSmoke = false;
     // Underhand for the lob, overhand for everything else — the same split the
@@ -676,6 +676,7 @@ function throwSmoke(strength, throwVel = player.velocity) {
 // is deterministic in ticks, like a CS2 bind — not frame-rate dependent.
 let pendingJT = null;
 const _jtVel = new THREE.Vector3();
+const _jtEye = new THREE.Vector3();
 function scriptedJumpthrow(mode = 'bind', e = null) {
     if (gameState !== 'playing' || !hasSmoke || pendingJT) return;
     const strength = (e?.shiftKey || (leftHeld && rightHeld)) ? 0.5
@@ -696,20 +697,32 @@ function tickScriptedJumpthrow() {
         keys.space = false;
         return;
     }
-    if (player.onGround) return;
+    if (player.onGround) {
+        // remember where the jump starts from — the release state is
+        // reconstructed analytically from here
+        jt.groundY = player.position.y;
+        return;
+    }
     jt.airTicks++;
     const ready = jt.mode === 'peak'
         ? player.velocity.y <= 20
         : jt.airTicks >= Math.round(CS2.jumpthrowReleaseTime * 64);
     if (ready) {
         if (jt.mode === 'bind') {
-            // A CS2 jumpthrow bind releases 0.1225s after the jump input
-            // (demo-calibrated). We're on the nearest 64Hz tick — pass the
-            // exact release-moment velocity for determinism; the player's
-            // own arc continues untouched.
+            // A CS2 jumpthrow bind releases exactly releaseTime after the
+            // jump input (demo-calibrated). The 64Hz tick grid lands ~1-2u
+            // off that moment — enough to flip razor-edge lineups (the
+            // window ledge) — so pass the EXACT analytic release state:
+            // velocity AND eye height from the jump arc at releaseTime.
+            const rT = CS2.jumpthrowReleaseTime;
             _jtVel.copy(player.velocity)
-                .setY(CS2.jumpImpulse - CS2.gravity * CS2.jumpthrowReleaseTime);
-            throwSmoke(jt.strength, _jtVel);
+                .setY(CS2.jumpImpulse - CS2.gravity * rT);
+            player.getEyePosition(_jtEye);
+            if (jt.groundY !== undefined) {
+                _jtEye.y = jt.groundY + player.eyeHeight
+                    + CS2.jumpImpulse * rT - 0.5 * CS2.gravity * rT * rT;
+            }
+            throwSmoke(jt.strength, _jtVel, _jtEye);
         } else {
             throwSmoke(jt.strength);
         }

@@ -172,7 +172,7 @@ export class GrenadeSystem {
                     } else if (nade.passed) {
                         nade.passed.add(b);
                     }
-                    vel.multiplyScalar(0.9);
+                    vel.multiplyScalar(CS2.nadeGlassSlow);
                 }
             }
             _dir.copy(_move).divideScalar(dist);

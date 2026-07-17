@@ -66,18 +66,28 @@ export const CS2 = {
     // the player's velocity at the release moment.
     nadeVelInheritH: 1.25,
     nadeVelInheritZ: 1.25,
-    // A jumpthrow bind releases ~0.105s after the jump input (measured by
+    // A jumpthrow bind releases ~0.1075s after the jump input (measured by
     // back-integrating demo trajectories to their spawn: release sits
-    // ~96-123ms after the jump; the landing sweep at throwSpeed 675 minimizes
-    // at 0.105 — release time and throw speed are coupled, refit together).
-    // BOTH the spawn position and the inherited velocity come from the player
-    // state at this moment. Landing validation across 113 demo jumpthrows:
-    // median 23u, 69% within 50u (was 256u/7% with the old model).
-    jumpthrowReleaseTime: 0.105,
+    // ~96-123ms after the jump; release time and throw speed are coupled, so
+    // they are fit together). BOTH the spawn position and the inherited
+    // velocity come from the player state at this moment. 0.1075 is the joint
+    // optimum of the 113-jumpthrow demo sweep (median 28u, 70% within 50u —
+    // the pure-demo minimum 0.105 scores 25u/71%, inside noise) AND the two
+    // csnades machine references, which are razor-sensitive to launch height:
+    // "Jungle from Back Alley" (roof graze, 18u) and "Window from Back Alley
+    // B" (ledge touch -> rests ON the box at z -92, 22u). At 0.105 the window
+    // throw clears the ledge by ~5u and falls under into the tunnel instead.
+    jumpthrowReleaseTime: 0.1075,
     nadeBounceVyCap: 200,       // max upward speed after a bounce — Source
                                 // grenades never rebound high even from huge
                                 // falls ("3 small hops" on rooftop landings)
     nadeRadius: 2,              // projectile collision radius
+    nadeGlassSlow: 1.0,         // speed kept when smashing breakable glass.
+                                // Was 0.9, but the csnades "Window from Back
+                                // Alley B" reference (glass intact, lands ON
+                                // the box) only reproduces with ~no slowdown —
+                                // and the headless harness has no breakables,
+                                // so the demo calibration never priced one in.
     nadeSpawnForward: 16,       // spawn distance in front of the eyes
     nadePitchBias: 10,           // degrees thrown above the crosshair when aiming
                                 // level (calibrated with the throw speed)
