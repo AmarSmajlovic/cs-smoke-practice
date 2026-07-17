@@ -35,7 +35,7 @@
             -webkit-tap-highlight-color: transparent;
             touch-action: none;
         }
-        #menu { touch-action: pan-y; }
+        #landing { touch-action: pan-y; }
         #canvas-container { width: 100vw; height: 100vh; height: 100dvh; }
 
         /* ---------- overlays ---------- */
@@ -46,8 +46,56 @@
         }
         .hidden { display: none !important; }
 
-        /* ---------- menu ---------- */
-        #menu { overflow-y: auto; padding: 24px 16px; justify-content: flex-start; }
+        /* ---------- landing ---------- */
+        #landing { overflow-y: auto; padding: 24px 16px; justify-content: flex-start; }
+        .land-inner {
+            position: relative; z-index: 1; width: 100%;
+            display: flex; flex-direction: column; align-items: center; text-align: center;
+        }
+        /* drifting smoke blobs behind the hero — pure CSS, no render cost worth naming */
+        .bg-fx { position: fixed; inset: 0; overflow: hidden; pointer-events: none; }
+        .bg-fx i {
+            position: absolute; border-radius: 50%;
+            background: radial-gradient(circle, rgba(214,218,222,.10) 0%, transparent 70%);
+            filter: blur(30px);
+            animation: drift 26s ease-in-out infinite alternate;
+        }
+        .bg-fx i:nth-child(1) { width: 58vw; height: 58vw; left: -16vw; top: 6vh; }
+        .bg-fx i:nth-child(2) { width: 46vw; height: 46vw; right: -12vw; top: 28vh; animation-delay: -9s; animation-duration: 31s; }
+        .bg-fx i:nth-child(3) { width: 40vw; height: 40vw; left: 30vw; bottom: -14vh; animation-delay: -17s; animation-duration: 23s; }
+        @keyframes drift {
+            from { transform: translate3d(0, 0, 0) scale(1); }
+            to   { transform: translate3d(9vw, -6vh, 0) scale(1.25); }
+        }
+
+        .oneliner {
+            max-width: 560px; margin: 2px auto 26px;
+            color: var(--muted); font-size: clamp(12.5px, 2.4vw, 14.5px); line-height: 1.75;
+        }
+        .oneliner b { color: var(--text); }
+
+        .beta-line {
+            margin-top: 20px; font-size: 12px; line-height: 1.7; color: var(--muted);
+            max-width: 560px;
+        }
+        .beta-line .warn { color: var(--accent); font-weight: 800; }
+        .beta-line a { color: var(--text); font-weight: 700; }
+
+        /* staggered entrance */
+        .land-inner > * { animation: rise .55s cubic-bezier(.2, .7, .3, 1) both; }
+        .land-inner > *:nth-child(1) { animation-delay: .05s; }
+        .land-inner > *:nth-child(2) { animation-delay: .12s; }
+        .land-inner > *:nth-child(3) { animation-delay: .19s; }
+        .land-inner > *:nth-child(4) { animation-delay: .26s; }
+        .land-inner > *:nth-child(5) { animation-delay: .34s; }
+        .land-inner > *:nth-child(6) { animation-delay: .40s; }
+        .land-inner > *:nth-child(7) { animation-delay: .46s; }
+        .land-inner > *:nth-child(8) { animation-delay: .52s; }
+        @keyframes rise {
+            from { opacity: 0; transform: translateY(14px); }
+            to   { opacity: 1; transform: none; }
+        }
+
         .logo {
             font-size: clamp(34px, 7vw, 64px);
             font-weight: 900; letter-spacing: 2px;
@@ -61,56 +109,72 @@
             padding: 3px 8px; border-radius: 12px; margin-left: 8px;
         }
         .tagline { color: var(--muted); margin: 6px 0 14px; font-size: clamp(12px, 2.5vw, 15px); letter-spacing: 1px; }
-        .disclaimer {
-            max-width: 560px; margin: 0 auto 26px; padding: 10px 16px;
-            border: 1px solid #2c323b; border-radius: 10px; background: rgba(245,184,61,.05);
-            color: var(--muted); font-size: 12.5px; line-height: 1.6; text-align: center;
-        }
-        .disclaimer b { color: var(--accent); }
 
+        /* ---------- maps (on the landing: mirage big, the rest SOON) ---------- */
         .maps {
-            display: grid; gap: 14px;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 190px));
-            justify-content: center; width: 100%; max-width: 900px;
-            margin-bottom: 26px;
+            display: grid; gap: 12px;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            width: 100%; max-width: 760px;
+            margin-bottom: 20px;
         }
-        @media (max-width: 480px) {
-            .maps { grid-template-columns: repeat(2, minmax(130px, 1fr)); gap: 10px; }
+        @media (max-width: 560px) {
+            .maps { grid-template-columns: repeat(3, 1fr); gap: 8px; }
         }
         .map-card {
             position: relative; border-radius: 12px; overflow: hidden;
             background: var(--panel); border: 1px solid #262b33;
-            aspect-ratio: 4/3; cursor: pointer;
+            aspect-ratio: 4/3;
             display: flex; flex-direction: column; justify-content: flex-end;
-            transition: transform .15s, border-color .15s;
         }
-        .map-card .art { position: absolute; inset: 0; }
+        .map-card .art { position: absolute; inset: 0; background-size: cover; background-position: center; }
         .map-card .name {
-            position: relative; padding: 10px 12px; font-weight: 700; font-size: 15px;
-            background: linear-gradient(transparent, rgba(0,0,0,.75));
+            position: relative; z-index: 1; padding: 7px 9px; font-weight: 700; font-size: 11.5px;
+            background: linear-gradient(transparent, rgba(0,0,0,.78));
             letter-spacing: .5px;
         }
-        .map-card.playable:hover { transform: translateY(-3px); border-color: var(--accent); }
+        /* the playable map is the hero of the page */
+        .map-card.playable {
+            grid-column: 1 / -1; aspect-ratio: 21/8; cursor: pointer;
+            border-color: rgba(245,184,61,.4);
+            transition: transform .15s, border-color .15s, box-shadow .15s;
+        }
+        .map-card.playable:hover {
+            transform: translateY(-3px); border-color: var(--accent);
+            box-shadow: 0 10px 34px rgba(245,184,61,.18);
+        }
         .map-card.playable .art {
             background: url('/thumbs/mirage.jpg') center/cover,
                         linear-gradient(160deg, #c9a35c 0%, #8a6b3a 55%, #4c3b22 100%);
         }
+        .map-card.playable .name { font-size: 16px; padding: 12px 14px; }
         .map-card.playable .art::after {
             content: '▶  PLAY'; position: absolute; inset: 0;
             display: flex; align-items: center; justify-content: center;
-            font-weight: 800; letter-spacing: 2px; color: #fff;
-            background: rgba(0,0,0,.25); opacity: 0; transition: opacity .15s;
+            font-weight: 900; letter-spacing: 3px; font-size: 18px; color: #fff;
+            background: rgba(0,0,0,.28); opacity: 0; transition: opacity .15s;
         }
         .map-card.playable:hover .art::after { opacity: 1; }
-        .map-card.soon { cursor: default; opacity: .55; }
-        .map-card.soon .art { background: linear-gradient(160deg, #3a414c 0%, #23272e 100%); }
         .badge {
             position: absolute; top: 10px; right: 10px; z-index: 2;
             font-size: 10px; font-weight: 800; letter-spacing: 1px;
             padding: 4px 8px; border-radius: 20px;
-            background: var(--panel2); color: var(--muted); border: 1px solid #2c323b;
+            background: var(--accent); color: #191100;
         }
-        .map-card.playable .badge { background: var(--accent); color: #191100; border: none; }
+        /* coming-soon maps: dimmed art (drop a thumb into the inline style when
+           you have one; the gradient beneath is the fallback) + SOON across */
+        .map-card.soon { cursor: default; }
+        .map-card.soon .art {
+            filter: grayscale(.9) brightness(.42);
+            background-color: #23272e;
+            background-image: linear-gradient(160deg, #3a414c 0%, #23272e 100%);
+        }
+        .map-card.soon::after {
+            content: 'SOON'; position: absolute; inset: 0; z-index: 2;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 900; letter-spacing: 3px; font-size: clamp(10px, 1.8vw, 14px);
+            color: rgba(255,255,255,.65); text-shadow: 0 2px 8px rgba(0,0,0,.9);
+        }
+        .map-card.soon .name { color: var(--muted); font-size: 10.5px; padding: 5px 8px; }
 
         .spawn-row { display: flex; align-items: center; gap: 10px; margin-bottom: 30px; }
         .spawn-row .lbl { color: var(--muted); font-size: 13px; letter-spacing: 1px; }
@@ -149,11 +213,44 @@
             font-weight: 900; font-size: 26px; color: #fff;
             text-shadow: 0 1px 6px rgba(0,0,0,.8);
         }
-        #load-status { margin-top: 14px; color: var(--muted); font-size: 13px; }
 
         /* ---------- resume ---------- */
         #resume { background: rgba(10, 12, 15, .82); }
         #resume .btns { display: flex; gap: 12px; margin-top: 22px; }
+        /* CS2-scale sensitivity (deg per count = sens x 0.022) */
+        .sens-row {
+            display: flex; align-items: center; gap: 12px;
+            margin-top: 20px; width: min(520px, 88vw);
+        }
+        .sens-row .lbl {
+            color: var(--muted); font-size: 12px; letter-spacing: 2px;
+            font-weight: 800; white-space: nowrap;
+        }
+        .sens-row input[type="range"] { flex: 1; accent-color: var(--accent); }
+        /* position tools: your spot as a copyable setpos + a paste-to-teleport box */
+        #pos-tools { width: min(560px, 92vw); margin-top: 18px; }
+        .pt-head {
+            color: var(--muted); font-size: 11.5px; letter-spacing: 2px;
+            font-weight: 800; margin-bottom: 8px; text-align: left;
+        }
+        .pt-row { display: flex; gap: 8px; margin-bottom: 8px; }
+        #mypos {
+            flex: 1; min-width: 0; background: #141414; border: 1px dashed #3a3f47;
+            color: #cfd3d8; padding: 9px 12px; border-radius: 6px; font: 12px monospace;
+            text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            cursor: pointer;
+        }
+        #mypos:hover { border-color: var(--accent); color: #fff; }
+        #setpos-input {
+            flex: 1; min-width: 0; background: #141414; border: 1px solid #333;
+            color: #ddd; padding: 9px 12px; border-radius: 6px; font: 12px monospace;
+        }
+        .btn.sm { padding: 9px 16px; font-size: 12px; white-space: nowrap; }
+        .pt-hint { color: #565b63; font-size: 11px; text-align: left; }
+        #sens-num {
+            width: 64px; background: #141414; border: 1px solid #333; color: #ddd;
+            padding: 7px 8px; border-radius: 6px; font: 13px monospace; text-align: center;
+        }
         .btn {
             padding: 13px 34px; border-radius: 10px; border: none; cursor: pointer;
             font-size: 15px; font-weight: 800; letter-spacing: 1px;
@@ -219,13 +316,54 @@
         #crosshair i:nth-child(2) { width: 2px; height: 7px; left: 11px; bottom: 0; }
         #crosshair i:nth-child(3) { width: 7px; height: 2px; top: 11px; left: 0; }
         #crosshair i:nth-child(4) { width: 7px; height: 2px; top: 11px; right: 0; }
+        /* CS2 grenade lineup crosshair: full-screen thin cross while the
+           throw button is held */
+        #nade-crosshair { position: fixed; inset: 0; pointer-events: none; z-index: 9; display: none; }
+        #nade-crosshair.on { display: block; }
+        #nade-crosshair .v {
+            position: absolute; left: 50%; top: 0; bottom: 0; width: 1px;
+            background: rgba(43,252,43,.55); box-shadow: 0 0 0 1px rgba(0,0,0,.25);
+        }
+        #nade-crosshair .h {
+            position: absolute; top: 50%; left: 0; right: 0; height: 1px;
+            background: rgba(43,252,43,.55); box-shadow: 0 0 0 1px rgba(0,0,0,.25);
+        }
         #pos-display {
             position: fixed; left: 10px; bottom: 8px; z-index: 10;
             font: 11px/1.4 monospace; color: rgba(255,255,255,.55); pointer-events: none;
         }
         #hud-hint {
             position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 10;
-            font-size: 12px; color: rgba(255,255,255,.5); pointer-events: none; letter-spacing: .5px;
+            display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;
+            pointer-events: none; max-width: 92vw;
+        }
+        #hud-hint .kb {
+            display: inline-flex; align-items: center; gap: 5px;
+            background: rgba(12,14,18,.55); border: 1px solid rgba(255,255,255,.12);
+            border-radius: 8px; padding: 3px 8px 3px 4px;
+            font-size: 11px; font-weight: 700; letter-spacing: .4px;
+            color: rgba(255,255,255,.62);
+        }
+        #hud-hint kbd {
+            background: rgba(255,255,255,.14); color: #fff; border-radius: 5px;
+            padding: 1px 6px; font: 700 10.5px/1.5 inherit; letter-spacing: .5px;
+            box-shadow: inset 0 -1px 0 rgba(0,0,0,.5);
+        }
+        #hud-hint .sep { width: 1px; background: rgba(255,255,255,.14); margin: 2px 3px; }
+
+        /* picture-in-picture frame (the actual image is a scissor render pass) */
+        #pip-frame {
+            position: fixed; top: 12px; right: 12px; z-index: 11;
+            width: min(26vw, 380px); aspect-ratio: 16/9;
+            border: 1px solid rgba(255,255,255,.28); border-radius: 6px;
+            box-shadow: 0 4px 18px rgba(0,0,0,.45);
+            pointer-events: none; display: none;
+        }
+        #pip-frame.on { display: block; }
+        #pip-frame .tag {
+            position: absolute; left: 8px; top: 6px;
+            font-size: 10px; font-weight: 800; letter-spacing: 1.5px;
+            color: rgba(255,255,255,.75); text-shadow: 0 1px 3px rgba(0,0,0,.8);
         }
 
         /* throw-type helper (desktop): little mouse diagrams, lights up live */
@@ -318,7 +456,22 @@
     <!-- HUD -->
     <div id="crosshair" class="hidden"><i></i><i></i><i></i><i></i></div>
     <div id="pos-display" class="hidden"></div>
-    <div id="hud-hint" class="hidden">F = jumpthrow &nbsp;•&nbsp; G = peak JT &nbsp;•&nbsp; SHIFT = med, ALT = lob &nbsp;•&nbsp; M = mark target, N = show aim &nbsp;•&nbsp; V noclip &nbsp;•&nbsp; C clear &nbsp;•&nbsp; R respawn</div>
+    <div id="hud-hint" class="hidden">
+        <span class="kb"><kbd>F</kbd> jumpthrow</span>
+        <span class="kb"><kbd>G</kbd> peak JT</span>
+        <span class="kb"><kbd>⇧F</kbd> medium</span>
+        <span class="kb"><kbd>⌥F</kbd> lob</span>
+        <span class="sep"></span>
+        <span class="kb"><kbd>M</kbd> target</span>
+        <span class="kb"><kbd>N</kbd> aim</span>
+        <span class="kb"><kbd>P</kbd> copy pos</span>
+        <span class="kb"><kbd>V</kbd> fly</span>
+        <span class="kb"><kbd>C</kbd> clear</span>
+        <span class="kb"><kbd>R</kbd> respawn</span>
+        <span class="kb"><kbd>ESC</kbd> menu</span>
+    </div>
+    <div id="nade-crosshair"><i class="v"></i><i class="h"></i></div>
+    <div id="pip-frame"><span class="tag">SMOKE CAM</span></div>
 
     <div id="throw-help" class="hidden">
         <div class="th-row" id="th-full"><span class="mouse"><span class="mb l on"></span><span class="mb r"></span></span> FULL THROW</div>
@@ -326,48 +479,54 @@
         <div class="th-row" id="th-lob"><span class="mouse"><span class="mb l"></span><span class="mb r on"></span></span> LOB (SHORT)</div>
     </div>
 
-    <!-- MAIN MENU -->
-    <div id="menu" class="overlay">
-        <div class="logo">SMOKE<span class="a">PRACTICE</span><span class="beta">BETA</span></div>
-        <div class="tagline">CS2 SMOKE LINEUP TRAINER — IN YOUR BROWSER, NO GAME NEEDED</div>
+    <!-- LANDING -->
+    <div id="landing" class="overlay">
+        <div class="bg-fx"><i></i><i></i><i></i></div>
+        <div class="land-inner">
+            <div class="logo">SMOKE<span class="a">PRACTICE</span><span class="beta">BETA</span></div>
+            <div class="tagline">CS2 SMOKE LINEUP TRAINER — IN YOUR BROWSER, NO GAME NEEDED</div>
 
-        <div class="disclaimer">
-            <b>Heads up:</b> this is not a lineup tutorial — it's a free-practice sandbox.
-            You throw real smokes on real map geometry and discover your own lineups,
-            just like offline practice in CS2. It's an early <b>beta</b>, so bugs and
-            small physics quirks can happen.
-        </div>
+            <p class="oneliner">
+                Throw <b>real smokes</b> on <b>real CS2 maps</b>, find your lineups and save them.
+                Free, in your browser — pick a map and play.
+            </p>
 
-        <div class="maps">
-            <div class="map-card playable" data-map="mirage">
-                <span class="badge">PLAYABLE</span>
-                <div class="art"></div>
-                <div class="name">de_mirage</div>
+            <div class="maps">
+                <div class="map-card playable" data-map="mirage">
+                    <span class="badge">PLAY NOW</span>
+                    <div class="art"></div>
+                    <div class="name">de_mirage</div>
+                </div>
+                <div class="map-card soon"><div class="art" style="background-image:url('/thumbs/dust2.jpg'), linear-gradient(160deg, #3a414c 0%, #23272e 100%)"></div><div class="name">de_dust2</div></div>
+                <div class="map-card soon"><div class="art" style="background-image:url('/thumbs/inferno.jpg'), linear-gradient(160deg, #3a414c 0%, #23272e 100%)"></div><div class="name">de_inferno</div></div>
+                <div class="map-card soon"><div class="art" style="background-image:url('/thumbs/anubis.jpg'), linear-gradient(160deg, #3a414c 0%, #23272e 100%)"></div><div class="name">de_anubis</div></div>
+                <div class="map-card soon"><div class="art" style="background-image:url('/thumbs/ancient.jpg'), linear-gradient(160deg, #3a414c 0%, #23272e 100%)"></div><div class="name">de_ancient</div></div>
+                <div class="map-card soon"><div class="art" style="background-image:url('/thumbs/nuke.jpg'), linear-gradient(160deg, #3a414c 0%, #23272e 100%)"></div><div class="name">de_nuke</div></div>
             </div>
-            <div class="map-card soon"><span class="badge">SOON</span><div class="art"></div><div class="name">de_dust2</div></div>
-            <div class="map-card soon"><span class="badge">SOON</span><div class="art"></div><div class="name">de_inferno</div></div>
-            <div class="map-card soon"><span class="badge">SOON</span><div class="art"></div><div class="name">de_anubis</div></div>
-            <div class="map-card soon"><span class="badge">SOON</span><div class="art"></div><div class="name">de_ancient</div></div>
-            <div class="map-card soon"><span class="badge">SOON</span><div class="art"></div><div class="name">de_nuke</div></div>
-        </div>
 
-        <div class="spawn-row">
-            <span class="lbl">SPAWN:</span>
-            <button class="pill active" id="spawn-t">T</button>
-            <button class="pill" id="spawn-ct">CT</button>
-        </div>
+            <div class="spawn-row">
+                <span class="lbl">SPAWN:</span>
+                <button class="pill active" id="spawn-t">T</button>
+                <button class="pill" id="spawn-ct">CT</button>
+            </div>
 
-        <div class="foot">
-            SMOKEPRACTICE.COM &nbsp;•&nbsp; <a href="mailto:amarsmajlovic27@gmail.com?subject=SMOKEPRACTICE%20feedback">💬 SEND FEEDBACK</a>
-            &nbsp;•&nbsp; <a href="https://steamcommunity.com/tradeoffer/new/?partner=189679040&amp;token=z0KSNYau"
-                target="_blank" rel="noopener noreferrer">🎁 BUY ME A SKIN</a><br>
-            made with <span class="heart">♥</span> by <b style="color:var(--text)">picrone</b>
+            <div class="beta-line">
+                <span class="warn">⚠ BETA</span> — physics can be slightly off in places while it's polished.
+                <a href="mailto:amarsmajlovic27@gmail.com?subject=SMOKEPRACTICE%20issue%20%2F%20feedback">📧 Report a bug / feedback</a>
+            </div>
 
-            <div class="legal">
-                Not affiliated with, endorsed by, or sponsored by Valve Corporation.
-                Counter-Strike, CS2 and all related map assets are trademarks and/or property
-                of Valve Corporation, used here in a free, non-commercial fan-made practice tool.
-                All donations are voluntary and buy nothing.
+            <div class="foot">
+                SMOKEPRACTICE.COM &nbsp;•&nbsp; <a href="mailto:amarsmajlovic27@gmail.com?subject=SMOKEPRACTICE%20feedback">💬 SEND FEEDBACK</a>
+                &nbsp;•&nbsp; <a href="https://steamcommunity.com/tradeoffer/new/?partner=189679040&amp;token=z0KSNYau"
+                    target="_blank" rel="noopener noreferrer">💛 DONATE</a><br>
+                made with <span class="heart">♥</span> by <b style="color:var(--text)">picrone</b>
+
+                <div class="legal">
+                    Not affiliated with, endorsed by, or sponsored by Valve Corporation.
+                    Counter-Strike, CS2 and all related map assets are trademarks and/or property
+                    of Valve Corporation, used here in a free, non-commercial fan-made practice tool.
+                    All donations are voluntary and buy nothing.
+                </div>
             </div>
         </div>
     </div>
@@ -381,7 +540,6 @@
             <img class="fill" id="load-fill" src="/thumbs/mirage.jpg" alt="">
             <div class="pct" id="load-pct">0%</div>
         </div>
-        <div id="load-status">Downloading map…</div>
     </div>
 
     <!-- RESUME / PAUSE -->
@@ -392,10 +550,24 @@
             <button class="btn ghost" id="btn-menu">MAIN MENU</button>
         </div>
 
-        <div style="margin:14px auto 0; max-width:520px; display:flex; gap:8px;">
-            <input id="setpos-input" placeholder="Paste setpos ...; setang ... (cs2utils.com / getpos)" spellcheck="false"
-                   style="flex:1; background:#141414; border:1px solid #333; color:#ddd; padding:9px 12px; border-radius:6px; font:12px monospace;">
-            <button class="btn ghost" id="setpos-go" style="white-space:nowrap;">TELEPORT</button>
+        <div class="sens-row">
+            <span class="lbl">SENSITIVITY</span>
+            <input type="range" id="sens-range" min="0.1" max="8" step="0.05">
+            <input id="sens-num" spellcheck="false" inputmode="decimal" title="CS2 sensitivity — same number you use in game">
+        </div>
+
+        <div id="pos-tools">
+            <div class="pt-head">📍 POSITION — COPY YOURS, OR PASTE ONE TO TELEPORT</div>
+            <div class="pt-row">
+                <code id="mypos" title="Click to copy">setpos …</code>
+                <button class="btn ghost sm" id="mypos-copy">COPY</button>
+            </div>
+            <div class="pt-row">
+                <input id="setpos-input" spellcheck="false"
+                       placeholder='Paste a "setpos …; setang …" here — from a friend, CS2 getpos or cs2utils.com'>
+                <button class="btn ghost sm" id="setpos-go">TELEPORT</button>
+            </div>
+            <div class="pt-hint">The same string works in the CS2 console too — and P copies it mid-game.</div>
         </div>
 
         <div id="lu-wrap">
@@ -408,7 +580,7 @@
         <div class="keys-hint desktop-hint">
             <b>WASD</b> move &nbsp; <b>SHIFT</b> walk &nbsp; <b>CTRL</b> crouch &nbsp; <b>SPACE</b> jump<br>
             <b>LMB</b> full &nbsp; <b>RMB</b> lob &nbsp; <b>LMB+RMB</b> or <b>SHIFT+LMB</b> medium &nbsp; <b>ALT+LMB</b> lob &nbsp; <b>F</b> = <b>jumpthrow</b>, <b>G</b> = <b>peak JT</b> (SHIFT/ALT picks type)<br>
-            thrown nades leave a <b>trail</b> &nbsp; <b>V</b> noclip (fly) &nbsp; <b>C</b> clear smokes+trails &nbsp; <b>R</b> respawn
+            thrown nades leave a <b>trail</b> &nbsp; <b>P</b> copy your position &nbsp; <b>V</b> noclip (fly) &nbsp; <b>C</b> clear smokes+trails &nbsp; <b>R</b> respawn
         </div>
         <div class="keys-hint mobile-hint">
             <b>▲▼◀▶</b> move (slide finger for diagonals)<br>
@@ -446,6 +618,17 @@
         <div style="color:var(--muted); font-size:13px;">SMOKEPRACTICE is played in landscape</div>
     </div>
 
+    <script>
+        // Vercel Web Analytics (cookieless). The /_vercel/insights route only
+        // exists on Vercel deployments with Analytics enabled in the dashboard,
+        // so localhost and LAN dev servers are skipped entirely.
+        if (!/^(localhost|127\.|192\.168\.|10\.|\[?::1)/.test(location.hostname)) {
+            const s = document.createElement('script');
+            s.defer = true;
+            s.src = '/_vercel/insights/script.js';
+            document.head.appendChild(s);
+        }
+    </script>
     <script type="module" src="./main.js"></script>
 </body>
 

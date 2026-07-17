@@ -88,9 +88,40 @@ controls.addEventListener('lock', () => {
 });
 document.addEventListener('pointerlockerror', () => {
     if (gameState === 'paused') {
-        document.querySelector('#resume h2').textContent = 'WAIT A SECOND, THEN CLICK AGAIN';
+        document.querySelector('#resume h2').textContent = 'WAIT A SECOND, THEN PRESS ESC OR CLICK';
     }
 });
+
+// ---------------------------------------------------------------- Sensitivity
+// True CS2 scale: degrees per mouse count = sens * 0.022 (m_yaw), so the same
+// number the player uses in game feels identical here. PointerLockControls
+// turns 0.002 rad per count at pointerSpeed 1 — the bridge is
+// sens * 0.022 * (PI/180) / 0.002 = sens * 0.192.
+const SENS_DEFAULT = 2.5; // CS2's own default
+let sens = parseFloat(localStorage.getItem('sp-sens')) || SENS_DEFAULT;
+function applySens() {
+    sens = THREE.MathUtils.clamp(sens, 0.05, 20);
+    controls.pointerSpeed = sens * 0.192;
+    localStorage.setItem('sp-sens', String(sens));
+    $('sens-range').value = Math.min(sens, 8);
+    $('sens-num').value = String(+sens.toFixed(2));
+}
+$('sens-range').addEventListener('input', () => {
+    sens = parseFloat($('sens-range').value);
+    applySens();
+});
+$('sens-num').addEventListener('change', () => {
+    const v = parseFloat($('sens-num').value.replace(',', '.'));
+    if (v > 0) sens = v;
+    applySens();
+});
+// keep WASD/ESC handling out of the text field
+$('sens-num').addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') $('sens-num').blur();
+});
+$('sens-num').addEventListener('keyup', (e) => e.stopPropagation());
+applySens();
 
 // JS fallback for the rotate overlay (iOS quirks with the CSS media query)
 function updateOrientationClass() {
@@ -120,9 +151,10 @@ function setupMobileLook() {
             const dy = t.clientY - mobileLook.lastY;
             mobileLook.lastX = t.clientX;
             mobileLook.lastY = t.clientY;
+            const s = LOOK_SENS * (sens / SENS_DEFAULT);
             mobileLook.euler.setFromQuaternion(camera.quaternion);
-            mobileLook.euler.y -= dx * LOOK_SENS;
-            mobileLook.euler.x -= dy * LOOK_SENS;
+            mobileLook.euler.y -= dx * s;
+            mobileLook.euler.x -= dy * s;
             mobileLook.euler.x = THREE.MathUtils.clamp(mobileLook.euler.x, -Math.PI / 2 + 0.01, Math.PI / 2 - 0.01);
             camera.quaternion.setFromEuler(mobileLook.euler);
         }
@@ -251,29 +283,28 @@ async function startGame(mapKey) {
     mapDef = MAPS[mapKey];
     currentMapKey = mapKey;
     gameState = 'loading';
-    hide('menu');
+    hide('landing');
     $('load-map-name').textContent = (mapDef.name || mapKey).toUpperCase();
     setLoadProgress(0);
-    $('load-status').textContent = 'Downloading map…';
     show('loading');
 
     try {
         map = await mapLoader.loadMap(mapDef, null, (stage, loaded, total) => {
             if (stage === 'download') {
-                const mb = (loaded / 1048576).toFixed(1);
                 // CDNs often hide Content-Length (compressed streams) -> fall
                 // back to the known file size so the bar still moves
                 const effTotal = total > 0 ? total : (mapDef.sizeMB ? mapDef.sizeMB * 1048576 : 0);
                 if (effTotal > 0) setLoadProgress(Math.min(90, (loaded / effTotal) * 88));
-                $('load-status').textContent = `Downloading map… ${mb} MB`;
             } else if (stage === 'build') {
                 setLoadProgress(93);
-                $('load-status').textContent = 'Building collision…';
             }
         });
     } catch (e) {
         console.error('Map load failed:', e);
-        $('load-status').textContent = 'Failed to load the map :(';
+        hide('loading');
+        show('landing');
+        gameState = 'menu';
+        toast('Map failed to load — check your connection and try again');
         return;
     }
 
@@ -307,11 +338,16 @@ function setLoadProgress(pct) {
 function pauseGame() {
     if (gameState !== 'playing') return;
     gameState = 'paused';
+    // drop any half-finished throw gesture so resuming can't fire a smoke
+    leftHeld = rightHeld = gestureL = gestureR = false;
+    updateThrowHelp();
     showResume('PAUSED');
 }
 
 function showResume(title) {
     document.querySelector('#resume h2').textContent = title;
+    // live "getpos": the spot the player is pausing at, ready to copy
+    if (map) $('mypos').textContent = getposString();
     renderLineups();
     show('resume');
 }
@@ -333,13 +369,14 @@ function backToMenu() {
     hide('hud-hint');
     hide('throw-help');
     grenades.clearAllSmokes();
+    pipStop();
     mapLoader.unload();
     map = null;
     gameState = 'menu';
-    show('menu');
+    show('landing');
 }
 
-// Menu wiring
+// Menu wiring — everything lives on the landing; a map card starts the game
 document.querySelector('.map-card.playable[data-map="mirage"]').addEventListener('click', () => {
     if (gameState === 'menu') startGame('mirage');
 });
@@ -440,6 +477,10 @@ const _gripQ = new THREE.Quaternion();
     viewmodel.traverse((o) => {
         if (o.isMesh) { o.material.envMapIntensity = 0.5; o.frustumCulled = false; }
     });
+    // The whole rig lives on layer 1: only the player camera sees it, so the
+    // smoke cam (PiP) doesn't show giant arms floating at the player's head.
+    viewmodel.traverse((o) => o.layers.set(1));
+    camera.layers.enable(1);
 
     vmMixer = new THREE.AnimationMixer(viewmodel);
     for (const clip of anims) vmActions[clip.name] = vmMixer.clipAction(clip);
@@ -548,6 +589,10 @@ const _vmEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 const keys = { w: false, a: false, s: false, d: false, shift: false, ctrl: false, space: false };
 
 document.addEventListener('keydown', (e) => {
+    // CS2-style ESC: the same key closes the pause menu again. (The browser
+    // eats the ESC that exits pointer lock, so this only ever fires while the
+    // menu is already open; the lock cooldown is handled by pointerlockerror.)
+    if (e.key === 'Escape' && gameState === 'paused' && map && !isMobile) resumeGame();
     const k = e.key.toLowerCase();
     if (k in keys) keys[k] = true;
     if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') keys.shift = true;
@@ -564,6 +609,7 @@ document.addEventListener('keydown', (e) => {
     if (e.code === 'KeyG') scriptedJumpthrow('peak', e);
     if (e.code === 'KeyM') placeAimTarget();
     if (e.code === 'KeyN') solveAimFromHere(e.shiftKey ? 0.5 : e.altKey ? 0.0 : 1.0);
+    if (e.code === 'KeyP') copyPos();
     if (k === 'c') { grenades.clearAllSmokes(); clearAimHelper(); }
     if (k === 'r') { player.spawn(spawnPoint.x, spawnPoint.y, spawnPoint.z); playerFrozen = false; }
     if (k === 'v') player.noclip = !player.noclip;
@@ -620,6 +666,72 @@ document.addEventListener('contextmenu', (e) => {
     if (controls.isLocked || isMobile) e.preventDefault();
 });
 
+// ---------------------------------------------------------------- Smoke cam
+// Picture-in-picture chase cam: follows the thrown grenade from behind-above,
+// then holds on the landing spot while the smoke blooms. Drawn as a scissor
+// pass into the #pip-frame rect on top of the main render.
+const pipCam = new THREE.PerspectiveCamera(65, 16 / 9, 1, 30000);
+const pipFrame = $('pip-frame');
+const pip = { nade: null, holdUntil: 0 };
+const _pipDesired = new THREE.Vector3();
+const _pipDir = new THREE.Vector3();
+
+function pipFollow(nade) {
+    pip.nade = nade;
+    pip.holdUntil = 0;
+    // start at the thrower's eye so the chase eases out of the player's view
+    pipCam.position.copy(camera.position);
+    pipFrame.classList.add('on');
+}
+
+function pipStop() {
+    pip.nade = null;
+    pipFrame.classList.remove('on');
+}
+
+function updatePip(delta) {
+    if (!pip.nade) return;
+    const target = pip.nade.position; // the vector persists after detonation
+    if (grenades.projectiles.includes(pip.nade)) {
+        // chase point behind-above the flight direction…
+        _pipDesired.set(pip.nade.velocity.x, 0, pip.nade.velocity.z);
+        if (_pipDesired.lengthSq() > 1) _pipDesired.normalize().multiplyScalar(-130);
+        _pipDesired.add(target);
+        _pipDesired.y = target.y + 70;
+        // …pulled in front of the first wall so the cam never sits inside one
+        _pipDir.copy(_pipDesired).sub(target);
+        const d = _pipDir.length();
+        if (d > 1) {
+            const hit = mapLoader.raycastNade(target, _pipDir.divideScalar(d), d);
+            if (hit) _pipDesired.copy(target).addScaledVector(_pipDir, Math.max(hit.distance - 6, 10));
+        }
+        pipCam.position.lerp(_pipDesired, Math.min(1, delta * 4));
+    } else if (!pip.holdUntil) {
+        pip.holdUntil = performance.now() + 3500; // watch the smoke bloom
+    } else if (performance.now() > pip.holdUntil) {
+        pipStop();
+        return;
+    }
+    pipCam.lookAt(target);
+}
+
+function renderPip() {
+    if (!pip.nade || gameState !== 'playing') return;
+    const r = pipFrame.getBoundingClientRect();
+    if (r.width < 8) return;
+    pipCam.aspect = r.width / r.height;
+    pipCam.updateProjectionMatrix();
+    // setViewport/setScissor take CSS pixels (three applies the pixel ratio);
+    // WebGL's origin is bottom-left, the DOM's is top-left
+    const y = window.innerHeight - r.bottom;
+    renderer.setScissorTest(true);
+    renderer.setViewport(r.left, y, r.width, r.height);
+    renderer.setScissor(r.left, y, r.width, r.height);
+    renderer.render(scene, pipCam);
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
+}
+
 const _euler = new THREE.Euler(0, 0, 0, 'YXZ');
 const _fwdH = new THREE.Vector3();
 const _fwdFull = new THREE.Vector3();
@@ -648,7 +760,8 @@ function throwSmoke(strength, throwVel = player.velocity, eyeOverride = null) {
     };
     $('lu-save').disabled = false;
 
-    grenades.throwGrenade(eyeOverride || player.getEyePosition(_eye), _fwdH, sourcePitchDeg, strength, throwVel);
+    const nade = grenades.throwGrenade(eyeOverride || player.getEyePosition(_eye), _fwdH, sourcePitchDeg, strength, throwVel);
+    pipFollow(nade);
 
     hasSmoke = false;
     // Underhand for the lob, overhand for everything else — the same split the
@@ -740,6 +853,28 @@ function tickScriptedJumpthrow() {
 // they press a movement key — the capsule depenetration would otherwise nudge
 // them off spots where the game hull fits tight against decorative trim.
 let playerFrozen = false;
+
+// The inverse of applySetposString: the player's current spot as a CS2 console
+// string ("getpos" format — eye position + view angles). The same string works
+// pasted back into our TELEPORT box, into a friend's browser, or into the CS2
+// console on the real map.
+function getposString() {
+    _euler.setFromQuaternion(camera.quaternion);
+    const gPitch = -THREE.MathUtils.radToDeg(_euler.x);
+    const gYaw = THREE.MathUtils.radToDeg(Math.atan2(-Math.sin(_euler.y), -Math.cos(_euler.y)));
+    const p = player.position;
+    return `setpos ${p.z.toFixed(2)} ${p.x.toFixed(2)} ${(p.y + CS2.eyeStand).toFixed(2)}; setang ${gPitch.toFixed(2)} ${gYaw.toFixed(2)} 0.00`;
+}
+
+function copyPos() {
+    if (!map) return;
+    const s = getposString();
+    if (!navigator.clipboard) { toast(s); return; }
+    navigator.clipboard.writeText(s).then(
+        () => toast('📋 Position copied — save it, share it, or paste it in the TELEPORT box'),
+        () => toast(s));
+}
+
 function applySetposString(str) {
     const m = str.match(/setpos\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)(?:.*?setang\s+(-?[\d.]+)\s+(-?[\d.]+))?/s);
     if (!m || !map) return false;
@@ -776,6 +911,9 @@ function applySetposString(str) {
         }
     };
     $('setpos-go').addEventListener('click', go);
+    // click the string or the button — both copy the current spot
+    $('mypos').addEventListener('click', copyPos);
+    $('mypos-copy').addEventListener('click', copyPos);
     // keep WASD state clean while typing in the input
     input.addEventListener('keydown', (e) => {
         e.stopPropagation();
@@ -1057,6 +1195,8 @@ let pendingLineup = null;
 })();
 
 // ---------------------------------------------------------------- Debug GUI
+// Dev-only: the whole panel (and lil-gui itself) is compiled out of prod builds.
+if (import.meta.env.DEV) {
 const gui = new GUI({ title: 'Debug' });
 const nadeFolder = gui.addFolder('Grenade Tuning');
 nadeFolder.add(tuning, 'throwSpeed', 400, 900, 5).name('Throw Speed (u/s)');
@@ -1102,9 +1242,11 @@ debugFolder.add(player, 'noclip').name('Noclip (V)').listen();
 debugFolder.close();
 gui.close();
 if (isMobile) gui.hide();
+}
 
 // ---------------------------------------------------------------- Main loop
 const posDisplay = $('pos-display');
+const nadeXhair = $('nade-crosshair');
 const clock = new THREE.Clock();
 let accumulator = 0;
 let frameCount = 0;
@@ -1168,7 +1310,12 @@ function animate() {
     updateViewmodel(delta);
 
     grenades.update(delta);
+    updatePip(delta);
     smokeFog.style.opacity = (grenades.smokeFogDensity(camera.position) * 0.97).toFixed(3);
+
+    // full-screen lineup crosshair while a throw button is charged (CS2 style)
+    nadeXhair.classList.toggle('on',
+        playingNow() && hasSmoke && (leftHeld || rightHeld || touchWindup));
 
     if (frameCount % 10 === 0 && posDisplay && map) {
         const hSpeed = Math.hypot(player.velocity.x, player.velocity.z);
@@ -1189,11 +1336,14 @@ function animate() {
     }
 
     renderer.render(scene, camera);
+    renderPip();
 }
 
 animate();
 
-window.__debug = { player, mapLoader, grenades, CS2, tuning, camera, THREE, startGame, solveAim, placeAimTarget, solveAimFromHere, lineupHelper };
+if (import.meta.env.DEV) {
+    window.__debug = { player, mapLoader, grenades, CS2, tuning, camera, THREE, startGame, solveAim, placeAimTarget, solveAimFromHere, lineupHelper, getposString, applySetposString };
+}
 
 window.addEventListener('resize', () => {
     applyFov(); // also sizes the canvas (fullscreen, hor+ FOV)
