@@ -35,13 +35,13 @@ npm run dev
 
 ### A note on game assets
 
-The map geometry (`public/maps/*.glb`) and viewmodel/grenade models
-(`public/models/*.glb`) are extracted from Counter-Strike 2 and remain
-Valve's property. They are included here so the project runs out of the box
-for a free, non-commercial fan tool; they will be removed immediately on
-request from the rights holder. The extraction pipeline for adding more maps
-(Source 2 Viewer → glTF → optimization scripts in `tools/`) is documented in
-[`MAP_GUIDE.md`](MAP_GUIDE.md).
+The map geometry and viewmodel/grenade models are extracted from
+Counter-Strike 2 and remain Valve's property, so they are not part of the
+git history — the app loads them from this repo's release assets
+(`ASSET_BASE` in `physicsConfig.js`), and they will be removed immediately
+on request from the rights holder. The extraction pipeline for adding more
+maps (Source 2 Viewer → glTF → optimization scripts in `tools/`) is
+documented in [`MAP_GUIDE.md`](MAP_GUIDE.md).
 
 ## Physics calibration
 

@@ -18,3 +18,7 @@ tools/smoke_traj.json
 tools/demo-traj/demotraj
 tools/players.csv
 tools/demo-data/*.traj.json
+
+# Valve-extracted binaries: hosted as GitHub release assets, never in git
+public/maps/*.glb
+public/models/*.glb

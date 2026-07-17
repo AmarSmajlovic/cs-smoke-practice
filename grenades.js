@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { CS2, tuning, VRF_SCALE, GRENADE_ENV_INTENSITY } from './physicsConfig.js';
+import { CS2, tuning, VRF_SCALE, GRENADE_ENV_INTENSITY, ASSET_BASE } from './physicsConfig.js';
 
 // Smoke particle animation, injected into three's Points shader. Rebuilds the
 // vertex position from the cloud centre each frame instead of reading `position`,
@@ -60,7 +60,7 @@ export class GrenadeSystem {
     async loadGrenadeModel() {
         try {
             const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
-            const gltf = await loader.loadAsync('/models/smoke_grenade.glb');
+            const gltf = await loader.loadAsync(`${ASSET_BASE}/smoke_grenade.glb`);
             this.grenadeModelGLB = gltf.scene;
             this.grenadeModelGLB.traverse((o) => {
                 if (o.isMesh) o.material.envMapIntensity = GRENADE_ENV_INTENSITY;

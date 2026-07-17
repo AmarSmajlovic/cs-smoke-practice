@@ -7,7 +7,7 @@ import GUI from 'lil-gui';
 import { MapLoader, MAPS } from './mapLoader.js';
 import { Player } from './player.js';
 import { GrenadeSystem } from './grenades.js';
-import { CS2, tuning, VRF_SCALE, GRENADE_ENV_INTENSITY } from './physicsConfig.js';
+import { CS2, tuning, VRF_SCALE, GRENADE_ENV_INTENSITY, ASSET_BASE } from './physicsConfig.js';
 
 // ---------------------------------------------------------------- State
 const isMobile = 'ontouchstart' in window && matchMedia('(pointer: coarse)').matches;
@@ -443,9 +443,9 @@ const _gripQ = new THREE.Quaternion();
     let anims;
     try {
         const [armsGltf, animGltf, nadeGltf] = await Promise.all([
-            loader.loadAsync('/models/arms.glb'),
-            loader.loadAsync('/models/nade_anims.glb'),
-            loader.loadAsync('/models/smoke_grenade.glb'),
+            loader.loadAsync(`${ASSET_BASE}/arms.glb`),
+            loader.loadAsync(`${ASSET_BASE}/nade_anims.glb`),
+            loader.loadAsync(`${ASSET_BASE}/smoke_grenade.glb`),
         ]);
         viewmodel = armsGltf.scene;
         anims = animGltf.animations;

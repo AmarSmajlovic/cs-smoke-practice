@@ -7,7 +7,7 @@ import {
     acceleratedRaycast,
 } from 'three-mesh-bvh';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { VRF_SCALE } from './physicsConfig.js';
+import { VRF_SCALE, ASSET_BASE } from './physicsConfig.js';
 
 // Accelerate all raycasts against geometries that have a bounds tree
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
@@ -24,7 +24,7 @@ THREE.Mesh.prototype.raycast = acceleratedRaycast;
 export const MAPS = {
     mirage: {
         name: 'de_mirage',
-        path: '/maps/mirage.glb',
+        path: `${ASSET_BASE}/mirage.glb`,
         sizeMB: 35.1, // progress fallback when the server hides Content-Length
         scale: VRF_SCALE,
         zUp: false,
@@ -32,7 +32,7 @@ export const MAPS = {
         // packed by tools/pack-collision.mjs — already in HU, app axes).
         // Node names carry the game's collision groups: physics_group_*,
         // physics_csgo_grenadeclip, physics_npcclip_playerclip, physics_sky…
-        collisionPath: '/maps/mirage-collision.glb',
+        collisionPath: `${ASSET_BASE}/mirage-collision.glb`,
         // buyzone centers extracted from the VRF physics export (world HU x/z)
         spawns: {
             T: { x: -136, z: 1248 },
