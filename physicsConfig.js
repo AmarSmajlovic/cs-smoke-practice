@@ -47,6 +47,17 @@ export const CS2 = {
     nadeGravityScale: 0.4,      // grenade projectiles use 0.4 * sv_gravity
     nadeElasticity: 0.45,       // bounce: tangential (along-surface) speed kept
     nadeElasticityVert: 0.45,  // uniform per Valve code (kept as a GUI knob)   // bounce: normal (out of surface) restitution
+    // HARD impacts lose far more, and the trigger is the NORMAL component of
+    // the impact velocity, not total speed: real demo bounces (isolated
+    // contacts, tools/bounce-speed.mjs binned by vzIn) keep tang/norm 0.45 up
+    // to ~450 u/s into the surface, but only ~0.28-0.29 above ~500 (n=101).
+    // Fast glancing skims (running throws: 900+ u/s total, small normal) keep
+    // the full 0.45 — binning by total speed mixes the two and breaks moving
+    // throws. Without this, steep fast falls (a roof bounce at vzIn ~750)
+    // skip hundreds of units too far after the first touch.
+    nadeElasticityHot: 0.29,
+    nadeHotSpeedStart: 450,     // full 0.45 below this normal impact speed
+    nadeHotSpeedEnd: 550,       // full 0.29 above this
     // Inherited player velocity: uniform 1.25 (Valve's constant). Confirmed
     // two independent ways on the demo launch velocities: 98 moving ground
     // throws pin the horizontal at 1.25 (12 u/s median, sharp minimum), and

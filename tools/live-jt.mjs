@@ -6,7 +6,7 @@ import puppeteer from 'puppeteer-core';
 
 const SETPOS = { gx: -463.968750, gy: 775.296326, gz: -7.968750 }; // eye, game
 const SETANG = { pitch: -46.506508, yaw: -94.999893 };
-const EXPECT = { x: -1814, y: -178, z: -690 }; // harness result @ 675/r0.105
+const EXPECT = { x: -1620, y: -170, z: -674 }; // harness @ hot-floor-bounce model
 
 const browser = await puppeteer.launch({ headless: 'new', channel: 'chrome' });
 const page = await browser.newPage();

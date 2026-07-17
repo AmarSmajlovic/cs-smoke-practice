@@ -210,8 +210,18 @@ export class GrenadeSystem {
                 const into = vel.dot(_normal);
                 _bounceN.copy(_normal).multiplyScalar(into);
                 _bounceT.copy(vel).sub(_bounceN);
-                vel.copy(_bounceT).multiplyScalar(tuning.elasticity)
-                    .addScaledVector(_normal, -into * tuning.elasticityVert);
+                // Hard FLOOR impacts keep ~0.29 instead of 0.45, triggered by
+                // the normal component of the impact (steep fast falls crush;
+                // fast glancing skims keep full bounce) — measured from real
+                // demo floor bounces binned by vzIn (bounce-speed.mjs). Walls
+                // stay at 0.45: the demo set has no fast wall data, and running
+                // throws smacking walls at 900 u/s measurably keep full bounce.
+                const hot = _normal.y > 0.7 ? THREE.MathUtils.clamp(
+                    (-into - CS2.nadeHotSpeedStart) / (CS2.nadeHotSpeedEnd - CS2.nadeHotSpeedStart), 0, 1) : 0;
+                const eT = THREE.MathUtils.lerp(tuning.elasticity, CS2.nadeElasticityHot, hot);
+                const eN = THREE.MathUtils.lerp(tuning.elasticityVert, CS2.nadeElasticityHot, hot);
+                vel.copy(_bounceT).multiplyScalar(eT)
+                    .addScaledVector(_normal, -into * eN);
                 if (vel.y > CS2.nadeBounceVyCap) vel.y = CS2.nadeBounceVyCap;
 
                 const isFloor = _normal.y > 0.7;
