@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>SMOKEPRACTICE — CS2 Smoke Lineup Trainer</title>
     <meta name="description" content="Practice CS2 smoke lineups in your browser — real map geometry, exact CS2 physics, jumpthrows. No game required. Works on mobile.">
     <meta name="theme-color" content="#0e1013">
@@ -398,7 +398,9 @@
 
         /* D-pad (slide finger between arrows, diagonals work) */
         #dpad {
-            position: absolute; left: 14px; bottom: 26px;
+            position: absolute;
+            left: max(14px, env(safe-area-inset-left));
+            bottom: 26px;
             width: 172px; height: 172px; pointer-events: auto;
             display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
             gap: 4px; touch-action: none;
@@ -414,7 +416,10 @@
         #look-zone { position: absolute; right: 0; top: 0; width: 55%; height: 100%; pointer-events: auto; }
 
         #btn-pause {
-            position: absolute; left: 12px; top: 12px; width: 46px; height: 46px;
+            position: absolute;
+            left: max(12px, env(safe-area-inset-left));
+            top: max(12px, env(safe-area-inset-top));
+            width: 46px; height: 46px;
             border-radius: 10px; font-size: 20px;
         }
 
@@ -441,22 +446,27 @@
         #btn-throw { right: 18px; bottom: 96px; width: 84px; height: 84px; font-size: 13px; background: rgba(245,184,61,.22); border-color: rgba(245,184,61,.6); }
         #btn-jump { right: 118px; bottom: 26px; width: 64px; height: 64px; font-size: 12px; }
         #btn-jt { right: 26px; bottom: 200px; width: 60px; height: 60px; font-size: 11px; }
-        #btn-pjt { right: 34px; bottom: 272px; width: 52px; height: 52px; font-size: 9px; line-height: 1.25; text-align: center; }
+        /* diagonal up-left of JT, clear of both LOB and the top bar even in
+           Safari landscape where the toolbar eats ~60px of height */
+        #btn-pjt { right: 96px; bottom: 252px; width: 52px; height: 52px; font-size: 9px; line-height: 1.25; text-align: center; }
         #btn-med { right: 118px; bottom: 118px; width: 54px; height: 54px; font-size: 10px; }
         #btn-lob { right: 106px; bottom: 190px; width: 54px; height: 54px; font-size: 10px; }
         .mbtn.act { background: rgba(245,184,61,.5); border-color: var(--accent); }
 
         /* top-right action bar: labelled pills instead of cryptic circles */
         #mob-top {
-            position: absolute; top: 10px; right: 10px;
-            display: flex; gap: 8px; pointer-events: none;
+            /* keep clear of the Dynamic Island / rounded corners in landscape */
+            position: absolute;
+            top: max(10px, env(safe-area-inset-top));
+            right: max(10px, env(safe-area-inset-right));
+            display: flex; gap: 7px; pointer-events: none;
         }
         .mbtn2 {
             pointer-events: auto; touch-action: none;
-            height: 40px; padding: 0 13px;
+            height: 36px; padding: 0 11px;
             display: flex; align-items: center; border-radius: 10px;
             background: rgba(255,255,255,.10); border: 2px solid rgba(255,255,255,.28);
-            font-weight: 800; font-size: 10.5px; letter-spacing: .8px; color: #fff;
+            font-weight: 800; font-size: 10px; letter-spacing: .7px; color: #fff;
         }
         .mbtn2:active { background: rgba(245,184,61,.45); }
         .mbtn2.act { background: rgba(245,184,61,.5); border-color: var(--accent); }
