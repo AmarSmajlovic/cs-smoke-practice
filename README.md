@@ -37,9 +37,10 @@ npm run dev
 
 The map geometry and viewmodel/grenade models are extracted from
 Counter-Strike 2 and remain Valve's property, so they are not part of the
-git history — the app loads them from this repo's release assets
-(`ASSET_BASE` in `physicsConfig.js`), and they will be removed immediately
-on request from the rights holder. The extraction pipeline for adding more
+git history — the app loads them from the
+[smokepractice-assets](https://github.com/AmarSmajlovic/smokepractice-assets)
+repo via jsDelivr (`ASSET_BASE` in `physicsConfig.js`), and they will be
+removed immediately on request from the rights holder. The extraction pipeline for adding more
 maps (Source 2 Viewer → glTF → optimization scripts in `tools/`) is
 documented in [`MAP_GUIDE.md`](MAP_GUIDE.md).
 

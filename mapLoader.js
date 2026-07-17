@@ -7,7 +7,7 @@ import {
     acceleratedRaycast,
 } from 'three-mesh-bvh';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { VRF_SCALE, ASSET_BASE } from './physicsConfig.js';
+import { VRF_SCALE, ASSET_BASE, ASSET_BASE_BIG } from './physicsConfig.js';
 
 // Accelerate all raycasts against geometries that have a bounds tree
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
@@ -24,7 +24,7 @@ THREE.Mesh.prototype.raycast = acceleratedRaycast;
 export const MAPS = {
     mirage: {
         name: 'de_mirage',
-        path: `${ASSET_BASE}/mirage.glb`,
+        path: `${ASSET_BASE_BIG}/mirage.glb`,
         sizeMB: 35.1, // progress fallback when the server hides Content-Length
         scale: VRF_SCALE,
         zUp: false,
