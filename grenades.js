@@ -176,6 +176,9 @@ export class GrenadeSystem {
                 }
             }
             _dir.copy(_move).divideScalar(dist);
+            // centre ray + radius standoff, NOT a swept sphere: a 5-ray hull
+            // sweep was tried and measurably degraded the demo gate — CS2's
+            // vphys behaves like the centre trace here
             const hit = this.mapLoader.raycastNade(pos, _dir, dist + CS2.nadeRadius);
             if (hit) {
                 // Land just off the surface

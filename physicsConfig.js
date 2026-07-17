@@ -80,7 +80,11 @@ export const CS2 = {
     jumpthrowReleaseTime: 0.1075,
     nadeBounceVyCap: 200,       // max upward speed after a bounce — Source
                                 // grenades never rebound high even from huge
-                                // falls ("3 small hops" on rooftop landings)
+                                // falls ("3 small hops"). Demo hot bounces
+                                // read vzOut median ~233, but that stat is
+                                // noisy (+-3-tick windows) and raising the cap
+                                // to 235 verifiably breaks the window-box
+                                // reference — the exact reference wins.
     nadeRadius: 2,              // projectile collision radius
     nadeGlassSlow: 1.0,         // speed kept when smashing breakable glass.
                                 // Was 0.9, but the csnades "Window from Back
