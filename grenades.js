@@ -125,6 +125,7 @@ export class GrenadeSystem {
         };
         this.projectiles.push(nade);
         this.startTrail(nade);
+        return nade; // so the HUD can follow it (picture-in-picture cam)
     }
 
     tick(dt) {
@@ -311,7 +312,8 @@ export class GrenadeSystem {
     detonate(nade) {
         const p = nade.position;
         console.log(`Smoke detonated at ${p.x.toFixed(0)} ${p.y.toFixed(0)} ${p.z.toFixed(0)}`);
-        this.createSmoke(p.clone());
+        // hand the trail over to the smoke: it lives while the cloud lives
+        this.createSmoke(p.clone(), nade.trail);
     }
 
     // CS2-style cloud: a dense grey billow that hugs the ground, never expands
@@ -358,7 +360,7 @@ export class GrenadeSystem {
         return out.addScaledVector(_tan, excess * 0.8);
     }
 
-    createSmoke(groundPos) {
+    createSmoke(groundPos, trail = null) {
         if (this.smokes.length >= this.maxSmokes) {
             this.removeSmoke(this.smokes[0]);
         }
@@ -476,7 +478,7 @@ export class GrenadeSystem {
         ];
 
         this.smokes.push({
-            layers, center,
+            layers, center, trail,
             floorY: groundPos.y,
             startTime: performance.now(),
             time: 0,
@@ -538,6 +540,14 @@ export class GrenadeSystem {
             this.scene.remove(layer.mesh);
             layer.geometry.dispose();
             layer.material.dispose();
+        }
+        // the lineup trail dies with its smoke
+        if (smoke.trail) {
+            this.scene.remove(smoke.trail);
+            smoke.trail.geometry.dispose();
+            smoke.trail.material.dispose();
+            const ti = this.trails.indexOf(smoke.trail);
+            if (ti !== -1) this.trails.splice(ti, 1);
         }
         const idx = this.smokes.indexOf(smoke);
         if (idx !== -1) this.smokes.splice(idx, 1);
