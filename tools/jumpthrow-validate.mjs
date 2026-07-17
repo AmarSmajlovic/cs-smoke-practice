@@ -45,7 +45,7 @@ function landErr(p, r, k) {
 }
 
 console.log(`${jumps.length} jumpthrows, uniform inherit 1.25, sweep release r:\n`);
-for (const r of [0.115, 0.1175, 0.12, 0.1225, 0.125, 0.1275, 0.13, 0.1325, 0.135]) {
+for (const r of [0.08, 0.09, 0.095, 0.10, 0.105, 0.11, 0.115]) {
     const errs = jumps.map((p) => landErr(p, r, 1.25)).sort((a, b) => a - b);
     console.log(`  r=${r.toFixed(2)}s: median ${pct(errs, 0.5).toFixed(0).padStart(4)}u  p90 ${pct(errs, 0.9).toFixed(0).padStart(4)}u  <=50u ${(100 * errs.filter((x) => x <= 50).length / errs.length).toFixed(0)}%`);
 }

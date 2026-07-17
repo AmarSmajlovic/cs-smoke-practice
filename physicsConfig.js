@@ -38,7 +38,12 @@ export const CS2 = {
     // A Ramp" reference (standing Left Click, machine setpos): it pins the
     // throw speed with no jump-inherit degeneracy. First touch lands 10u,
     // rest 15u from reference with 685/bias 8.
-    nadeBaseThrowSpeed: 685,    // CSGO code says 750*0.9=675; CS2 measures ~685 on two machine references (stairs 11u, ramp roof 2u)
+    nadeBaseThrowSpeed: 675,    // Valve's 750*0.9. An earlier 685 came from two
+                                // hand references, but against the full demo set
+                                // 675 wins decisively (standing p90 426u->78u,
+                                // <=50u 61%->87%) and reproduces the csnades
+                                // "Jungle from Back Alley" roof-bounce path that
+                                // 685 clears by 1-2u.
     nadeGravityScale: 0.4,      // grenade projectiles use 0.4 * sv_gravity
     nadeElasticity: 0.45,       // bounce: tangential (along-surface) speed kept
     nadeElasticityVert: 0.45,  // uniform per Valve code (kept as a GUI knob)   // bounce: normal (out of surface) restitution
@@ -50,13 +55,14 @@ export const CS2 = {
     // the player's velocity at the release moment.
     nadeVelInheritH: 1.25,
     nadeVelInheritZ: 1.25,
-    // A jumpthrow bind releases ~0.1225s after the jump input (measured by
+    // A jumpthrow bind releases ~0.105s after the jump input (measured by
     // back-integrating demo trajectories to their spawn: release sits
-    // ~96-123ms after the jump; landing error is minimized at 0.1225-0.125).
+    // ~96-123ms after the jump; the landing sweep at throwSpeed 675 minimizes
+    // at 0.105 — release time and throw speed are coupled, refit together).
     // BOTH the spawn position and the inherited velocity come from the player
     // state at this moment. Landing validation across 113 demo jumpthrows:
-    // median 27u (was 256u with the old model).
-    jumpthrowReleaseTime: 0.1225,
+    // median 23u, 69% within 50u (was 256u/7% with the old model).
+    jumpthrowReleaseTime: 0.105,
     nadeBounceVyCap: 200,       // max upward speed after a bounce — Source
                                 // grenades never rebound high even from huge
                                 // falls ("3 small hops" on rooftop landings)
