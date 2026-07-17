@@ -123,6 +123,15 @@ $('sens-num').addEventListener('keydown', (e) => {
 $('sens-num').addEventListener('keyup', (e) => e.stopPropagation());
 applySens();
 
+// CTRL+W (crouch + forward!) closes the tab — the classic browser-FPS rage
+// moment. Two guards: a leave-confirmation while a map is loaded (works in
+// every browser), and Keyboard Lock on W (Chromium), which fully captures
+// CTRL/CMD+W while the tab is fullscreen so the prompt never even appears.
+window.addEventListener('beforeunload', (e) => {
+    if (map) { e.preventDefault(); e.returnValue = ''; }
+});
+if (!isMobile) navigator.keyboard?.lock?.(['KeyW']).catch(() => {});
+
 // JS fallback for the rotate overlay (iOS quirks with the CSS media query)
 function updateOrientationClass() {
     if (!isMobile) return;
