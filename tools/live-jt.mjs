@@ -4,9 +4,9 @@
 // Usage: node tools/live-jt.mjs
 import puppeteer from 'puppeteer-core';
 
-const SETPOS = { gx: -463.968750, gy: 775.296326, gz: -7.968750 }; // eye, game
-const SETANG = { pitch: -46.506508, yaw: -94.999893 };
-const EXPECT = { x: -1620, y: -170, z: -674 }; // harness @ hot-floor-bounce model
+const SETPOS = { gx: -160.031250, gy: 887.968750, gz: -71.631531 }; // eye, game
+const SETANG = { pitch: -48.316418, yaw: -146.480621 };
+const EXPECT = { x: -357, y: -94, z: -1980 }; // window: ON the box corner
 
 const browser = await puppeteer.launch({ headless: 'new', channel: 'chrome' });
 const page = await browser.newPage();
@@ -52,6 +52,19 @@ console.log('pre-throw player:', JSON.stringify(pre));
 await page.keyboard.down('KeyF');
 await new Promise((r) => setTimeout(r, 120));
 await page.keyboard.up('KeyF');
+// capture the projectile's launch state
+const launch = await page.evaluate(async () => {
+    const { grenades } = window.__debug;
+    for (let i = 0; i < 200; i++) {
+        if (grenades.projectiles.length) {
+            const n = grenades.projectiles[0];
+            return { pos: n.position.toArray(), vel: n.velocity.toArray(), age: n.age };
+        }
+        await new Promise((r) => setTimeout(r, 10));
+    }
+    return null;
+});
+console.log('LIVE launch:', JSON.stringify(launch));
 
 // smoke flies ~6s; poll for the detonation log
 for (let i = 0; i < 120 && !detonation; i++) await new Promise((r) => setTimeout(r, 250));
