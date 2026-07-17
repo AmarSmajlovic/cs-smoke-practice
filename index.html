@@ -441,12 +441,25 @@
         #btn-throw { right: 18px; bottom: 96px; width: 84px; height: 84px; font-size: 13px; background: rgba(245,184,61,.22); border-color: rgba(245,184,61,.6); }
         #btn-jump { right: 118px; bottom: 26px; width: 64px; height: 64px; font-size: 12px; }
         #btn-jt { right: 26px; bottom: 200px; width: 60px; height: 60px; font-size: 11px; }
+        #btn-pjt { right: 34px; bottom: 272px; width: 52px; height: 52px; font-size: 9px; line-height: 1.25; text-align: center; }
         #btn-med { right: 118px; bottom: 118px; width: 54px; height: 54px; font-size: 10px; }
         #btn-lob { right: 106px; bottom: 190px; width: 54px; height: 54px; font-size: 10px; }
-        #btn-clear { right: 12px; top: 12px; width: 44px; height: 44px; font-size: 11px; border-radius: 10px; }
-        #btn-fly { right: 66px; top: 12px; width: 44px; height: 44px; font-size: 10px; border-radius: 10px; }
-        #btn-savelu { right: 120px; top: 12px; width: 44px; height: 44px; font-size: 16px; border-radius: 10px; }
         .mbtn.act { background: rgba(245,184,61,.5); border-color: var(--accent); }
+
+        /* top-right action bar: labelled pills instead of cryptic circles */
+        #mob-top {
+            position: absolute; top: 10px; right: 10px;
+            display: flex; gap: 8px; pointer-events: none;
+        }
+        .mbtn2 {
+            pointer-events: auto; touch-action: none;
+            height: 40px; padding: 0 13px;
+            display: flex; align-items: center; border-radius: 10px;
+            background: rgba(255,255,255,.10); border: 2px solid rgba(255,255,255,.28);
+            font-weight: 800; font-size: 10.5px; letter-spacing: .8px; color: #fff;
+        }
+        .mbtn2:active { background: rgba(245,184,61,.45); }
+        .mbtn2.act { background: rgba(245,184,61,.5); border-color: var(--accent); }
     </style>
 </head>
 
@@ -585,8 +598,8 @@
         <div class="keys-hint mobile-hint">
             <b>▲▼◀▶</b> move (slide finger for diagonals)<br>
             drag the <b>right side</b> of the screen to look around<br>
-            <b>THROW</b> full &nbsp; <b>MED</b> medium &nbsp; <b>LOB</b> short &nbsp; <b>JT</b> = auto jumpthrow<br>
-            <b>FLY</b> noclip &nbsp; <b>C</b> clear smokes+trails &nbsp; <b>☰</b> pause
+            <b>THROW</b> full &nbsp; <b>MED</b> medium &nbsp; <b>LOB</b> short &nbsp; <b>JT</b> jumpthrow &nbsp; <b>PEAK JT</b> release at jump peak<br>
+            <b>CLEAR</b> smokes+trails &nbsp; <b>FLY</b> noclip &nbsp; <b>RESPAWN</b> back to spawn &nbsp; <b>📌 SAVE</b> lineup &nbsp; <b>☰</b> pause
         </div>
     </div>
 
@@ -603,9 +616,13 @@
         <div class="mbtn" id="btn-lob">LOB</div>
         <div class="mbtn" id="btn-jump">JUMP</div>
         <div class="mbtn" id="btn-jt">JT</div>
-        <div class="mbtn" id="btn-clear">C</div>
-        <div class="mbtn" id="btn-fly">FLY</div>
-        <div class="mbtn" id="btn-savelu">📌</div>
+        <div class="mbtn" id="btn-pjt">PEAK<br>JT</div>
+        <div id="mob-top">
+            <div class="mbtn2" id="btn-savelu">📌 SAVE</div>
+            <div class="mbtn2" id="btn-fly">FLY</div>
+            <div class="mbtn2" id="btn-respawn">RESPAWN</div>
+            <div class="mbtn2" id="btn-clear">CLEAR</div>
+        </div>
         <div class="mbtn" id="btn-pause">☰</div>
     </div>
 
