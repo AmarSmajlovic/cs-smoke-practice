@@ -463,6 +463,27 @@ export class MapLoader {
             `nade ${(this.nadeCollider.geometry.attributes.position.count / 3).toLocaleString()} tris`);
     }
 
+    // Swept "sphere" for the flying grenade: the centre ray plus four rays
+    // offset perpendicular to the travel by the projectile radius. CS2 traces
+    // a hull, and a single centre ray misses lip/edge grazes by 1-2u — which
+    // is exactly the margin razor-edge lineups (roof edge, window ledge) are
+    // decided by. Returns the earliest hit across the five rays.
+    sweepNade(origin, direction, far, radius) {
+        let best = this.raycastNade(origin, direction, far);
+        _sweepA.set(0, 1, 0);
+        if (Math.abs(direction.y) > 0.95) _sweepA.set(1, 0, 0);
+        _sweepA.cross(direction).normalize();
+        _sweepB.crossVectors(direction, _sweepA).normalize();
+        for (const [va, ka] of [[_sweepA, 1], [_sweepA, -1], [_sweepB, 1], [_sweepB, -1]]) {
+            _sweepO.copy(origin).addScaledVector(va, ka * radius);
+            const h = this.raycastNade(_sweepO, direction, far);
+            // near-zero offset-ray hits mean we're already brushing that
+            // surface (skimming the ground) — the centre ray owns those
+            if (h && h.distance > radius * 2 && (!best || h.distance < best.distance)) best = h;
+        }
+        return best;
+    }
+
     // Raycast for GRENADES: the game's grenade collision when available.
     // The hit gets .surfaceGroup (physics_group_* name) for per-surface
     // elasticity, resolved from the merged geometry's face ranges.
@@ -520,4 +541,5 @@ export class MapLoader {
 }
 
 const _raycaster = new THREE.Raycaster();
+const _sweepA = new THREE.Vector3(), _sweepB = new THREE.Vector3(), _sweepO = new THREE.Vector3();
 const CS2_BREAK_MARGIN = 3;
