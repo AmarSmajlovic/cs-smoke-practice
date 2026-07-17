@@ -1068,11 +1068,13 @@ function setupMobileButtons() {
     throwBtn('btn-throw', 1.0);
     throwBtn('btn-med', 0.5);
     throwBtn('btn-lob', 0.0);
-    press('btn-clear', () => grenades.clearAllSmokes());
+    press('btn-clear', () => { grenades.clearAllSmokes(); clearAimHelper(); });
     press('btn-pause', () => { if (gameState === 'playing') pauseGame(); });
     press('btn-fly', () => { player.noclip = !player.noclip; $('btn-fly').classList.toggle('act', player.noclip); });
+    press('btn-respawn', () => { player.spawn(spawnPoint.x, spawnPoint.y, spawnPoint.z); playerFrozen = false; });
     press('btn-savelu', () => saveLastThrow());
     press('btn-jt', () => scriptedJumpthrow('bind'));
+    press('btn-pjt', () => scriptedJumpthrow('peak'));
 }
 
 if (isMobile) {
