@@ -239,7 +239,12 @@ export class GrenadeSystem {
                 // demo floor bounces binned by vzIn (bounce-speed.mjs). Walls
                 // stay at 0.45: the demo set has no fast wall data, and running
                 // throws smacking walls at 900 u/s measurably keep full bounce.
-                const hot = _normal.y > 0.7 ? THREE.MathUtils.clamp(
+                // FLAT floors only (>0.995): the demo hot set is flat-floor
+                // impacts, and a sloped face must keep its full 0.45 redirect —
+                // the underpass "spin" reference (steep fall onto the 9-deg
+                // ramp hooks ~46 deg left and carries to short) dies to a
+                // crushed dribble if the slope is allowed to eat the bounce.
+                const hot = _normal.y > 0.995 ? THREE.MathUtils.clamp(
                     (-into - CS2.nadeHotSpeedStart) / (CS2.nadeHotSpeedEnd - CS2.nadeHotSpeedStart), 0, 1) : 0;
                 const eT = THREE.MathUtils.lerp(tuning.elasticity, CS2.nadeElasticityHot, hot);
                 const eN = THREE.MathUtils.lerp(tuning.elasticityVert, CS2.nadeElasticityHot, hot);

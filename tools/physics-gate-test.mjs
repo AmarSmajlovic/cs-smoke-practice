@@ -141,5 +141,25 @@ for (const [name, list, th] of CHECKS) {
     const ok = touchErr <= 60 && restOnFloor;
     if (!ok) failed = true;
     console.log(`${ok ? 'PASS' : 'FAIL'}  left-arch  touch ${touch ? `(${touch.z.toFixed(0)}, ${touch.x.toFixed(0)})` : 'NIKAD'} err ${touchErr.toFixed(0)}u (max 60)  rest z=${p2.y.toFixed(0)} (mora < -140, na podu shorta)`);
+}
+
+// ---- user reference: top-mid "spin" onto short ----
+// setpos -160.03 887.97 -71.65; setang -45.79 -134.50, standing left click.
+// Wall bounce game(-945, 89) -> steep fall onto the 8.8-deg underpass ramp
+// -> hooks ~46 deg LEFT ("spin") and carries onto short. P-verified rest
+// game (-1203.6, 228.4, pod ~-170).
+{
+    const gYawS = -134.498291 * Math.PI / 180;
+    const oYawS = Math.atan2(-Math.sin(gYawS), -Math.cos(gYawS));
+    const fwdHS = new THREE.Vector3(-Math.sin(oYawS), 0, -Math.cos(oYawS));
+    const eye = new THREE.Vector3(887.970276, -71.648178, -160.031250);
+    const p3 = new THREE.Vector3(), v3 = new THREE.Vector3();
+    grenades.computeThrow(eye.clone(), fwdHS, -45.790627, 1.0, new THREE.Vector3(), p3, v3);
+    const nade = { position: p3, velocity: v3, rolling: false, age: 0 };
+    while (grenades.stepProjectile(nade, CS2.TICK, false));
+    const restErr = Math.hypot(p3.z - -1203.64, p3.x - 228.38);
+    const ok = restErr <= 40 && p3.y < -160;
+    if (!ok) failed = true;
+    console.log(`${ok ? 'PASS' : 'FAIL'}  spin-short rest (${p3.z.toFixed(0)}, ${p3.x.toFixed(0)}, ${p3.y.toFixed(0)}) err ${restErr.toFixed(0)}u (max 40)`);
     process.exitCode = failed ? 1 : 0;
 }

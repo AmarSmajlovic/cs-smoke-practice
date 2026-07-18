@@ -109,6 +109,14 @@ export const CS2 = {
             minX: 620, maxX: 645, minY: 140, maxY: 260, minZ: -895, maxZ: -835,
             nx: -0.99996, ny: 0, nz: -0.00873,
         },
+        {   // Underpass floor by the short arches: the exported hull goes flat
+            // at game y<255 but the real 8.8-deg downhill (-y) ramp reaches the
+            // touch point of the top-mid "spin" reference (steep fall hooks
+            // ~46 deg left and carries onto short, P-verified rest 3u off).
+            // Normal = the measured tilt of the adjacent exported slope face.
+            minX: 238, maxX: 262, minY: -178, maxY: -160, minZ: -1130, maxZ: -1085,
+            nx: -0.15303, ny: 0.98822, nz: 0,
+        },
     ],
     nadeRadius: 2,              // projectile collision radius
     nadeGlassSlow: 1.0,         // speed kept when smashing breakable glass.
