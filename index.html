@@ -257,6 +257,7 @@
         body.mobile .ctl-only-mobile { display: block; }
         #controls-close { margin-top: 22px; }
         .st-head { display: flex; align-items: center; justify-content: space-between; }
+        .fc-hint { width: min(520px, 88vw); margin-top: 6px; }
         .pill.sm { padding: 4px 14px; font-size: 12px; }
         .st-side { display: flex; gap: 6px; }
         #spawn-radar {
@@ -677,9 +678,10 @@
 
         <div class="sens-row">
             <span class="lbl">SMOKE CAM</span>
-            <button class="pill sm" id="followcam-toggle">WINDOW</button>
-            <span class="pt-hint">follows your smoke after a throw — fullscreen, or a small window in the corner</span>
+            <button class="pill sm" id="fc-window">CORNER WINDOW</button>
+            <button class="pill sm" id="fc-full">FULLSCREEN</button>
         </div>
+        <div class="pt-hint fc-hint">After every throw a camera follows your smoke to where it lands — in a small corner window, or taking over the whole screen (✕ brings you back).</div>
 
         <div id="spawn-tools">
             <div class="pt-head st-head">

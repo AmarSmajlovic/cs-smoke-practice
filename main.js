@@ -686,20 +686,19 @@ const pipCam = new THREE.PerspectiveCamera(65, 16 / 9, 1, 30000);
 const pipFrame = $('pip-frame');
 const pip = { nade: null, holdUntil: 0 };
 // FULLSCREEN: the main view chases the smoke after a throw (✕ to bail out).
-// WINDOW: a small corner window instead. Phones default to fullscreen — the
-// window is hard to read there; desktops default to the window.
-let followCam = (localStorage.getItem('sp-followcam') ?? (isMobile ? '1' : '0')) === '1';
-function syncFollowCamUI() {
-    $('followcam-toggle').textContent = followCam ? 'FULLSCREEN' : 'WINDOW';
-    $('followcam-toggle').classList.toggle('active', followCam);
-}
-$('followcam-toggle').addEventListener('click', () => {
-    followCam = !followCam;
-    localStorage.setItem('sp-followcam', followCam ? '1' : '0');
+// WINDOW: a small corner window instead — the default everywhere.
+let followCam = localStorage.getItem('sp-followcam') === '1';
+function setFollowCam(v) {
+    followCam = v;
+    localStorage.setItem('sp-followcam', v ? '1' : '0');
     pipStop(); // don't carry a half-open cam across the mode switch
-    syncFollowCamUI();
-});
-syncFollowCamUI();
+    $('fc-window').classList.toggle('active', !v);
+    $('fc-full').classList.toggle('active', v);
+}
+$('fc-window').addEventListener('click', () => setFollowCam(false));
+$('fc-full').addEventListener('click', () => setFollowCam(true));
+$('fc-window').classList.toggle('active', !followCam);
+$('fc-full').classList.toggle('active', followCam);
 const _pipDesired = new THREE.Vector3();
 const _pipDir = new THREE.Vector3();
 
