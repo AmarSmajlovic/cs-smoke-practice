@@ -125,6 +125,13 @@ export const CS2 = {
                                 // the box) only reproduces with ~no slowdown —
                                 // and the headless harness has no breakables,
                                 // so the demo calibration never priced one in.
+    // Medium throw (LMB+RMB / standing shift+F / MED button). Valve's nominal
+    // power is 0.5, but the reference lineup "setpos 814.97 -1548.99 -44.97;
+    // setang -4.90 -178.50" lands a hair long at 0.5 against the in-game
+    // throw; 0.49 pulls the rest point 5.2u (~10cm) shorter there
+    // (tools/medium-lineup-probe.mjs sweeps the strength for that setpos).
+    // The demo harness keeps scoring against nominal 0.5 (harness STRENGTHS).
+    nadeMediumStrength: 0.49,
     nadeSpawnForward: 16,       // spawn distance in front of the eyes
     nadePitchBias: 10,           // degrees thrown above the crosshair when aiming
                                 // level (calibrated with the throw speed)

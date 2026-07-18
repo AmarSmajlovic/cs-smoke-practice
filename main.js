@@ -441,7 +441,8 @@ const vmRot = new THREE.Euler(0, Math.PI, 0);
 // 1:1 the glove is a thumbnail in the corner. This is taste, not a conversion.
 const VM_SCALE = VRF_SCALE * 1.45;
 const vmEnv = { intensity: GRENADE_ENV_INTENSITY };
-let touchWindup = false; // mobile throw button held
+let touchHeldStrength = null; // strength of the mobile throw button currently held (null = none)
+let touchJTConsumed = false;  // JT fired during the hold: eat the release throw
 let bobPhase = 0;
 const sway = { x: 0, y: 0 };
 let lastCamYaw = 0, lastCamPitch = 0;
@@ -566,7 +567,9 @@ function updateViewmodel(delta) {
 
     // Charge pose while a throw button is held; the throw clip itself is fired
     // from throwSmoke() on release, and draw/idle follow from there.
-    const want = chargeClipFor(leftHeld || touchWindup, rightHeld);
+    const want = touchHeldStrength !== null
+        ? (touchHeldStrength === 0 ? 'charge_low' : touchHeldStrength === 1 ? 'charge_high' : 'charge_mid')
+        : chargeClipFor(leftHeld, rightHeld);
     if (want && hasSmoke) playVm(want);
 
     // walk bob (classic CS-style figure-eight)
@@ -635,7 +638,7 @@ document.addEventListener('keydown', (e) => {
     // use e.code: on macOS Option+F yields e.key "ƒ", not "f"
     if (e.code === 'KeyF') scriptedJumpthrow('bind', e);
     if (e.code === 'KeyM') placeAimTarget();
-    if (e.code === 'KeyN') solveAimFromHere(e.shiftKey ? 0.5 : e.altKey ? 0.0 : 1.0);
+    if (e.code === 'KeyN') solveAimFromHere(e.shiftKey ? CS2.nadeMediumStrength : e.altKey ? 0.0 : 1.0);
     if (e.code === 'KeyP') copyPos();
     if (k === 'c') { grenades.clearAllSmokes(); clearAimHelper(); }
     if (k === 'r') respawnAtSpawn(true);
@@ -679,9 +682,9 @@ document.addEventListener('mouseup', (e) => {
     updateThrowHelp();
     if (leftHeld || rightHeld) return; // wait until every button is released
 
-    let strength = gestureL && gestureR ? 0.5 : gestureL ? 1.0 : gestureR ? 0.0 : null;
+    let strength = gestureL && gestureR ? CS2.nadeMediumStrength : gestureL ? 1.0 : gestureR ? 0.0 : null;
     // trackpad-friendly modifiers on a plain left click
-    if (strength === 1.0 && e.shiftKey) strength = 0.5;
+    if (strength === 1.0 && e.shiftKey) strength = CS2.nadeMediumStrength;
     else if (strength === 1.0 && e.altKey) strength = 0.0;
     gestureL = gestureR = false;
 
@@ -839,19 +842,20 @@ function throwSmoke(strength, throwVel = player.velocity, eyeOverride = null) {
 let pendingJT = null;
 const _jtVel = new THREE.Vector3();
 const _jtEye = new THREE.Vector3();
-function scriptedJumpthrow(mode = 'bind', e = null) {
-    if (gameState !== 'playing' || !hasSmoke || pendingJT) return;
+function scriptedJumpthrow(mode = 'bind', e = null, strengthOverride = null) {
+    if (gameState !== 'playing' || !hasSmoke || pendingJT) return false;
     // SHIFT picks medium ONLY while standing still: lining up means
     // shift-WALKING to the spot, and a walking W+shift+F must stay a FULL
     // throw like a real CS2 bind — a silent medium here made every walking
     // jumpthrow land way short.
     const standing = Math.hypot(player.velocity.x, player.velocity.z) < 5;
-    const strength = ((e?.shiftKey && standing) || (leftHeld && rightHeld)) ? 0.5
+    const strength = strengthOverride ?? (((e?.shiftKey && standing) || (leftHeld && rightHeld)) ? CS2.nadeMediumStrength
         : (e?.altKey || rightHeld) ? 0.0
-        : 1.0;
+        : 1.0);
     gestureL = gestureR = false; // consume the gesture: no double throw on mouseup
     keys.space = true;
     pendingJT = { mode, strength, airTicks: 0, totalTicks: 0 };
+    return true;
 }
 
 // Called once per 64Hz physics tick.
@@ -1216,7 +1220,7 @@ function solveAimFromHere(strength) {
     const sol = solveAim(lineupHelper.target, strength);
     clearAimHelper(true);
 
-    const name = strength === 1 ? 'full' : strength === 0.5 ? 'medium' : 'lob';
+    const name = strength === 1 ? 'full' : strength === 0 ? 'lob' : 'medium';
     if (!sol || sol.err > 40) {
         toast(`No ${name} throw reaches the target from here (best miss ${sol ? sol.err.toFixed(0) : '∞'}u)`);
         return;
@@ -1260,11 +1264,22 @@ function setupMobileButtons() {
         }
     };
     press('btn-jump', () => { keys.space = true; }, () => { keys.space = false; });
+    // Hold a throw button and tap JT to jumpthrow at that strength: the JT
+    // tap consumes the hold, so releasing the button afterwards throws nothing.
+    const jtBtn = $('btn-jt');
+    const jtHint = (s) => {
+        jtBtn.textContent = s === 0 ? 'JT LOB' : (s !== null && s < 1) ? 'JT MED' : 'JT';
+        jtBtn.classList.toggle('act', s !== null && s !== 1);
+    };
     const throwBtn = (id, strength) => press(id,
-        () => { touchWindup = true; },
-        () => { touchWindup = false; if (gameState === 'playing') throwSmoke(strength); });
+        () => { touchHeldStrength = strength; touchJTConsumed = false; jtHint(strength); },
+        () => {
+            touchHeldStrength = null; jtHint(null);
+            const consumed = touchJTConsumed; touchJTConsumed = false;
+            if (!consumed && gameState === 'playing') throwSmoke(strength);
+        });
     throwBtn('btn-throw', 1.0);
-    throwBtn('btn-med', 0.5);
+    throwBtn('btn-med', CS2.nadeMediumStrength);
     throwBtn('btn-lob', 0.0);
     press('btn-clear', () => { grenades.clearAllSmokes(); clearAimHelper(); });
     press('btn-pause', () => { if (gameState === 'playing') pauseGame(); });
@@ -1272,7 +1287,11 @@ function setupMobileButtons() {
     press('btn-respawn', () => respawnAtSpawn(true));
     press('btn-retry', () => retryLastThrow());
     press('btn-savelu', () => saveLastThrow());
-    press('btn-jt', () => scriptedJumpthrow('bind'));
+    press('btn-jt', () => {
+        if (scriptedJumpthrow('bind', null, touchHeldStrength) && touchHeldStrength !== null) {
+            touchJTConsumed = true;
+        }
+    });
 }
 
 if (isMobile) {
@@ -1332,7 +1351,7 @@ function applyLineup(lu) {
     player.spawn(lu.x, lu.y, lu.z);
     camera.quaternion.setFromEuler(new THREE.Euler(lu.pitch, lu.yaw, 0, 'YXZ'));
     player.getEyePosition(camera.position);
-    const strengthName = lu.s === 1 ? 'FULL (LMB)' : lu.s === 0.5 ? 'MEDIUM (LMB+RMB)' : 'LOB (RMB)';
+    const strengthName = lu.s === 1 ? 'FULL (LMB)' : lu.s === 0 ? 'LOB (RMB)' : 'MEDIUM (LMB+RMB)';
     toast(`${lu.name} — throw: ${strengthName}${lu.jt ? ' + JUMPTHROW' : ''}`);
 }
 
@@ -1348,7 +1367,7 @@ function renderLineups() {
         const row = document.createElement('div');
         row.className = 'lu-item';
         const badges = (lu.jt ? '<span class="tag">JT</span>' : '') +
-            (lu.s === 0.5 ? '<span class="tag">MED</span>' : lu.s === 0 ? '<span class="tag">LOB</span>' : '');
+            (lu.s === 0 ? '<span class="tag">LOB</span>' : lu.s < 1 ? '<span class="tag">MED</span>' : '');
         row.innerHTML = `<span class="nm">${lu.name}</span>${badges}` +
             `<span class="ic" data-a="share" title="Copy share link">🔗</span>` +
             `<span class="ic" data-a="rename" title="Rename">✎</span>` +
@@ -1524,7 +1543,7 @@ function animate() {
 
     // full-screen lineup crosshair while a throw button is charged (CS2 style)
     nadeXhair.classList.toggle('on',
-        playingNow() && hasSmoke && (leftHeld || rightHeld || touchWindup));
+        playingNow() && hasSmoke && (leftHeld || rightHeld || touchHeldStrength !== null));
 
     if (frameCount % 10 === 0 && posDisplay && map) {
         const hSpeed = Math.hypot(player.velocity.x, player.velocity.z);
