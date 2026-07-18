@@ -215,7 +215,14 @@
         }
 
         /* ---------- resume ---------- */
-        #resume { background: rgba(10, 12, 15, .82); }
+        #resume { background: rgba(10, 12, 15, .82); overflow-y: auto; }
+        /* phones (esp. landscape): the menu is taller than the screen — stack
+           from the top and scroll instead of flex-centering content off both
+           edges, and keep the spawn radar small enough to leave room */
+        body.mobile #resume { justify-content: flex-start; padding: 18px 12px 28px; }
+        body.mobile #resume h2 { font-size: 18px; }
+        body.mobile #spawn-tools { width: min(260px, 70vw); }
+        body.mobile #pos-tools, body.mobile #lu-wrap { width: min(520px, 94vw); }
         #resume .btns { display: flex; gap: 12px; margin-top: 22px; }
         /* CS2-scale sensitivity (deg per count = sens x 0.022) */
         .sens-row {
