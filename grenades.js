@@ -58,6 +58,9 @@ export class GrenadeSystem {
     }
 
     async loadGrenadeModel() {
+        // headless physics tools have no DOM/fetch pipeline — and no need
+        // for the visual model; the placeholder sphere is never rendered there
+        if (typeof document === 'undefined') return;
         try {
             const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
             const gltf = await loader.loadAsync(`${ASSET_BASE}/smoke_grenade.glb`);

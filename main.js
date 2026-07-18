@@ -801,7 +801,12 @@ const _jtVel = new THREE.Vector3();
 const _jtEye = new THREE.Vector3();
 function scriptedJumpthrow(mode = 'bind', e = null) {
     if (gameState !== 'playing' || !hasSmoke || pendingJT) return;
-    const strength = (e?.shiftKey || (leftHeld && rightHeld)) ? 0.5
+    // SHIFT picks medium ONLY while standing still: lining up means
+    // shift-WALKING to the spot, and a walking W+shift+F must stay a FULL
+    // throw like a real CS2 bind — a silent medium here made every walking
+    // jumpthrow land way short.
+    const standing = Math.hypot(player.velocity.x, player.velocity.z) < 5;
+    const strength = ((e?.shiftKey && standing) || (leftHeld && rightHeld)) ? 0.5
         : (e?.altKey || rightHeld) ? 0.0
         : 1.0;
     gestureL = gestureR = false; // consume the gesture: no double throw on mouseup
