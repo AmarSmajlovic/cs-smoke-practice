@@ -94,6 +94,22 @@ export const CS2 = {
                                 // which needs >=230 to carry over the roof
                                 // and drop onto short (lands 25u from the
                                 // reference at 230). 230 satisfies all three.
+    // Reference-calibrated bounce planes. Where a marquee lineup video's
+    // measured trajectory demonstrably deviates from the flat physics-hull
+    // face (the csnades "Left Arch from Back Alley" wall bounce leaves ~1-2
+    // deg right of the pure mirror — P-verified touch point; demo wall
+    // bounces are exact mirrors, median 0.01 deg, so this is specific to the
+    // reference, not a global effect), the bounce uses this measured normal
+    // instead of the axis-snapped one. App coords; normal yawed -0.5 deg
+    // (full P-touch fit wants -1.0 deg, but that puts the touchdown 2u from
+    // the plateau ledge and drags the rest point off the video's smoke spot
+    // — -0.5 splits the difference; tune with tools/leftarch-plane-sweep).
+    nadeClipPlanes: [
+        {   // Back Alley arch wall panel, game y=631, x -895..-835, z 140..260
+            minX: 620, maxX: 645, minY: 140, maxY: 260, minZ: -895, maxZ: -835,
+            nx: -0.99996, ny: 0, nz: -0.00873,
+        },
+    ],
     nadeRadius: 2,              // projectile collision radius
     nadeGlassSlow: 1.0,         // speed kept when smashing breakable glass.
                                 // Was 0.9, but the csnades "Window from Back

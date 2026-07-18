@@ -199,9 +199,25 @@ export class GrenadeSystem {
                     const ax = Math.abs(_normal.x), ay = Math.abs(_normal.y), az = Math.abs(_normal.z);
                     const m = Math.max(ax, ay, az);
                     if (m > 0.978) {
-                        if (m === ax) _normal.set(Math.sign(_normal.x), 0, 0);
-                        else if (m === ay) _normal.set(0, Math.sign(_normal.y), 0);
-                        else _normal.set(0, 0, Math.sign(_normal.z));
+                        // reference-measured planes win over the axis snap:
+                        // these walls verifiably bounce a hair off-axis in the
+                        // lineup videos (see physicsConfig.nadeClipPlanes)
+                        let matched = false;
+                        for (const cp of CS2.nadeClipPlanes) {
+                            if (pos.x >= cp.minX && pos.x <= cp.maxX &&
+                                pos.y >= cp.minY && pos.y <= cp.maxY &&
+                                pos.z >= cp.minZ && pos.z <= cp.maxZ &&
+                                _normal.x * cp.nx + _normal.y * cp.ny + _normal.z * cp.nz > 0.9) {
+                                _normal.set(cp.nx, cp.ny, cp.nz);
+                                matched = true;
+                                break;
+                            }
+                        }
+                        if (!matched) {
+                            if (m === ax) _normal.set(Math.sign(_normal.x), 0, 0);
+                            else if (m === ay) _normal.set(0, Math.sign(_normal.y), 0);
+                            else _normal.set(0, 0, Math.sign(_normal.z));
+                        }
                     }
                 }
 
