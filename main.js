@@ -615,7 +615,6 @@ document.addEventListener('keydown', (e) => {
     }
     // use e.code: on macOS Option+F yields e.key "ƒ", not "f"
     if (e.code === 'KeyF') scriptedJumpthrow('bind', e);
-    if (e.code === 'KeyG') scriptedJumpthrow('peak', e);
     if (e.code === 'KeyM') placeAimTarget();
     if (e.code === 'KeyN') solveAimFromHere(e.shiftKey ? 0.5 : e.altKey ? 0.0 : 1.0);
     if (e.code === 'KeyP') copyPos();
@@ -829,6 +828,14 @@ function tickScriptedJumpthrow() {
         // reconstructed analytically from here
         jt.groundY = player.position.y;
         return;
+    }
+    // A just-unfrozen (setpos) player first FALLS a few units onto the floor.
+    // That airborne tick is not the jump — releasing there threw the nade
+    // with falling velocity straight into the nearest wall. Wait until the
+    // actual jump impulse shows up, then start timing the release.
+    if (!jt.sawJump) {
+        if (player.velocity.y > 100) jt.sawJump = true;
+        else return;
     }
     jt.airTicks++;
     const ready = jt.mode === 'peak'
@@ -1088,7 +1095,6 @@ function setupMobileButtons() {
     press('btn-respawn', () => { player.spawn(spawnPoint.x, spawnPoint.y, spawnPoint.z); playerFrozen = false; });
     press('btn-savelu', () => saveLastThrow());
     press('btn-jt', () => scriptedJumpthrow('bind'));
-    press('btn-pjt', () => scriptedJumpthrow('peak'));
 }
 
 if (isMobile) {

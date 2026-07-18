@@ -84,13 +84,16 @@ export const CS2 = {
     // B" (ledge touch -> rests ON the box at z -92, 22u). At 0.105 the window
     // throw clears the ledge by ~5u and falls under into the tunnel instead.
     jumpthrowReleaseTime: 0.1075,
-    nadeBounceVyCap: 200,       // max upward speed after a bounce — Source
+    nadeBounceVyCap: 230,       // max upward speed after a bounce — Source
                                 // grenades never rebound high even from huge
                                 // falls ("3 small hops"). Demo hot bounces
-                                // read vzOut median ~233, but that stat is
-                                // noisy (+-3-tick windows) and raising the cap
-                                // to 235 verifiably breaks the window-box
-                                // reference — the exact reference wins.
+                                // read vzOut median ~233; 235+ verifiably
+                                // breaks the window-box reference, and 200
+                                // (the old safe pick) killed the csnades
+                                // "Left Arch from Back Alley" wall bounce,
+                                // which needs >=230 to carry over the roof
+                                // and drop onto short (lands 25u from the
+                                // reference at 230). 230 satisfies all three.
     nadeRadius: 2,              // projectile collision radius
     nadeGlassSlow: 1.0,         // speed kept when smashing breakable glass.
                                 // Was 0.9, but the csnades "Window from Back

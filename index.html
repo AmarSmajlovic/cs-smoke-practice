@@ -445,11 +445,7 @@
         .mbtn:active { background: rgba(245,184,61,.45); }
         #btn-throw { right: 18px; bottom: 96px; width: 84px; height: 84px; font-size: 13px; background: rgba(245,184,61,.22); border-color: rgba(245,184,61,.6); }
         #btn-jump { right: 118px; bottom: 26px; width: 64px; height: 64px; font-size: 12px; }
-        #btn-jt { right: 26px; bottom: 200px; width: 60px; height: 60px; font-size: 11px; }
-        /* diagonal up-left of JT, clear of both LOB and the top bar even in
-           Safari landscape where the toolbar eats ~60px of height */
-        #btn-pjt { right: 96px; bottom: 252px; width: 52px; height: 52px; font-size: 9px; line-height: 1.25; text-align: center; }
-        #btn-med { right: 118px; bottom: 118px; width: 54px; height: 54px; font-size: 10px; }
+        #btn-jt { right: 26px; bottom: 200px; width: 60px; height: 60px; font-size: 11px; }        #btn-med { right: 118px; bottom: 118px; width: 54px; height: 54px; font-size: 10px; }
         #btn-lob { right: 106px; bottom: 190px; width: 54px; height: 54px; font-size: 10px; }
         .mbtn.act { background: rgba(245,184,61,.5); border-color: var(--accent); }
 
@@ -481,7 +477,7 @@
     <div id="pos-display" class="hidden"></div>
     <div id="hud-hint" class="hidden">
         <span class="kb"><kbd>F</kbd> jumpthrow</span>
-        <span class="kb"><kbd>G</kbd> peak JT</span>
+
         <span class="kb"><kbd>⇧F</kbd> medium</span>
         <span class="kb"><kbd>⌥F</kbd> lob</span>
         <span class="sep"></span>
@@ -599,13 +595,13 @@
         </div>
         <div class="keys-hint desktop-hint">
             <b>WASD</b> move &nbsp; <b>SHIFT</b> walk &nbsp; <b>CTRL</b> crouch &nbsp; <b>SPACE</b> jump<br>
-            <b>LMB</b> full &nbsp; <b>RMB</b> lob &nbsp; <b>LMB+RMB</b> or <b>SHIFT+LMB</b> medium &nbsp; <b>ALT+LMB</b> lob &nbsp; <b>F</b> = <b>jumpthrow</b>, <b>G</b> = <b>peak JT</b> (SHIFT/ALT picks type while standing — moving always throws FULL, like a real bind)<br>
+            <b>LMB</b> full &nbsp; <b>RMB</b> lob &nbsp; <b>LMB+RMB</b> or <b>SHIFT+LMB</b> medium &nbsp; <b>ALT+LMB</b> lob &nbsp; <b>F</b> = <b>jumpthrow</b> (SHIFT/ALT picks type while standing — moving always throws FULL)<br>
             thrown nades leave a <b>trail</b> &nbsp; <b>P</b> copy your position &nbsp; <b>V</b> noclip (fly) &nbsp; <b>C</b> clear smokes+trails &nbsp; <b>R</b> respawn
         </div>
         <div class="keys-hint mobile-hint">
             <b>▲▼◀▶</b> move (slide finger for diagonals)<br>
             drag the <b>right side</b> of the screen to look around<br>
-            <b>THROW</b> full &nbsp; <b>MED</b> medium &nbsp; <b>LOB</b> short &nbsp; <b>JT</b> jumpthrow &nbsp; <b>PEAK JT</b> release at jump peak<br>
+            <b>THROW</b> full &nbsp; <b>MED</b> medium &nbsp; <b>LOB</b> short &nbsp; <b>JT</b> jumpthrow &nbsp; jump + click = manual jumpthrow<br>
             <b>CLEAR</b> smokes+trails &nbsp; <b>FLY</b> noclip &nbsp; <b>RESPAWN</b> back to spawn &nbsp; <b>📌 SAVE</b> lineup &nbsp; <b>☰</b> pause
         </div>
     </div>
@@ -623,7 +619,7 @@
         <div class="mbtn" id="btn-lob">LOB</div>
         <div class="mbtn" id="btn-jump">JUMP</div>
         <div class="mbtn" id="btn-jt">JT</div>
-        <div class="mbtn" id="btn-pjt">PEAK<br>JT</div>
+
         <div id="mob-top">
             <div class="mbtn2" id="btn-savelu">📌 SAVE</div>
             <div class="mbtn2" id="btn-fly">FLY</div>
