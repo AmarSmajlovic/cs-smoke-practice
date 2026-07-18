@@ -874,6 +874,7 @@ function tickScriptedJumpthrow() {
 // they press a movement key — the capsule depenetration would otherwise nudge
 // them off spots where the game hull fits tight against decorative trim.
 let playerFrozen = false;
+let setposHold = null;
 
 // The inverse of applySetposString: the player's current spot as a CS2 console
 // string ("getpos" format — eye position + view angles). The same string works
@@ -917,6 +918,11 @@ function applySetposString(str) {
     }
     player.getEyePosition(camera.position);
     playerFrozen = true;
+    // Chrome can deliver a spurious mouse-movement burst while the pointer
+    // re-locks after the menu closes — at CS2 sens that is up to ~1 degree,
+    // which silently ruins razor-edge lineups. Hold the imported angles for a
+    // moment so the teleported aim survives the lock.
+    setposHold = { x: camera.rotation.x, y: camera.rotation.y, frames: 90 };
     return true;
 }
 
@@ -1304,6 +1310,15 @@ function tickPhysics(dt) {
 
 const playingNow = () => gameState === 'playing' && (isMobile || controls.isLocked);
 
+// re-assert teleported view angles while the pointer lock settles (see
+// applySetposString); any real mouse input after the hold works as normal
+function tickSetposHold() {
+    if (!setposHold) return;
+    camera.rotation.order = 'YXZ';
+    camera.rotation.set(setposHold.x, setposHold.y, 0);
+    if (--setposHold.frames <= 0) setposHold = null;
+}
+
 // Standing inside a smoke, CS2 shows a near-solid grey wash — billboard puffs
 // alone always leave see-through gaps at point-blank range. A fullscreen
 // overlay driven by how deep the camera sits inside the nearest cloud.
@@ -1357,6 +1372,7 @@ function animate() {
             `vel ${hSpeed.toFixed(0)}${player.onLadder ? ' [ladder]' : ''}${player.noclip ? ' [noclip]' : ''}`;
     }
 
+    tickSetposHold();
     renderer.render(scene, camera);
     renderPip();
 }
