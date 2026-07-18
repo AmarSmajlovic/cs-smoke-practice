@@ -685,6 +685,21 @@ document.addEventListener('contextmenu', (e) => {
 const pipCam = new THREE.PerspectiveCamera(65, 16 / 9, 1, 30000);
 const pipFrame = $('pip-frame');
 const pip = { nade: null, holdUntil: 0 };
+// FULLSCREEN: the main view chases the smoke after a throw (✕ to bail out).
+// WINDOW: a small corner window instead. Phones default to fullscreen — the
+// window is hard to read there; desktops default to the window.
+let followCam = (localStorage.getItem('sp-followcam') ?? (isMobile ? '1' : '0')) === '1';
+function syncFollowCamUI() {
+    $('followcam-toggle').textContent = followCam ? 'FULLSCREEN' : 'WINDOW';
+    $('followcam-toggle').classList.toggle('active', followCam);
+}
+$('followcam-toggle').addEventListener('click', () => {
+    followCam = !followCam;
+    localStorage.setItem('sp-followcam', followCam ? '1' : '0');
+    pipStop(); // don't carry a half-open cam across the mode switch
+    syncFollowCamUI();
+});
+syncFollowCamUI();
 const _pipDesired = new THREE.Vector3();
 const _pipDir = new THREE.Vector3();
 
@@ -693,9 +708,9 @@ function pipFollow(nade) {
     pip.holdUntil = 0;
     // start at the thrower's eye so the chase eases out of the player's view
     pipCam.position.copy(camera.position);
-    // phones: the PiP window is too small to read — the smoke cam takes the
-    // whole screen instead (see animate), with a ✕ to bail out early
-    if (isMobile) $('followcam-exit').classList.remove('hidden');
+    // fullscreen mode chases the smoke with the main view (see animate) and
+    // shows a ✕ to bail out early; window mode uses the corner PiP frame
+    if (followCam) $('followcam-exit').classList.remove('hidden');
     else pipFrame.classList.add('on');
 }
 
@@ -1515,8 +1530,8 @@ function animate() {
     }
 
     tickSetposHold();
-    if (isMobile && pip.nade) {
-        // mobile smoke cam: fullscreen chase instead of a tiny PiP window
+    if (followCam && pip.nade) {
+        // fullscreen smoke cam: the main view chases the nade
         pipCam.aspect = window.innerWidth / window.innerHeight;
         pipCam.updateProjectionMatrix();
         camera.visible = false; // keep the viewmodel arms out of the shot

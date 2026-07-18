@@ -498,10 +498,11 @@
 
         /* top-right action bar: labelled pills instead of cryptic circles */
         #mob-top {
-            /* keep clear of the Dynamic Island / rounded corners in landscape */
+            /* left side next to the pause button — the top-right corner
+               belongs to the smoke-cam window when it's in WINDOW mode */
             position: absolute;
             top: max(10px, env(safe-area-inset-top));
-            right: max(10px, env(safe-area-inset-right));
+            left: calc(max(12px, env(safe-area-inset-left)) + 56px);
             display: flex; gap: 7px; pointer-events: none;
         }
         .mbtn2 {
@@ -568,7 +569,8 @@
             <div class="ctl-row"><span class="k">P</span><span>copy your position as a CS2 setpos — works in the game console too</span></div>
             <div class="ctl-row"><span class="k">M</span><span>mark the spot you're aiming at as a target</span></div>
             <div class="ctl-row"><span class="k">N</span><span>auto-aim a throw at the target from where you stand (SHIFT = medium, ALT = lob)</span></div>
-            <div class="ctl-row"><span class="k">ESC</span><span>pause menu — sensitivity, spawns, teleport, saved lineups</span></div>
+            <div class="ctl-row"><span class="k">SMOKE CAM</span><span>after every throw a cam follows the smoke — corner window or fullscreen chase (✕ to exit), pick in the pause menu</span></div>
+            <div class="ctl-row"><span class="k">ESC</span><span>pause menu — sensitivity, smoke cam, spawns, teleport, saved lineups</span></div>
         </div>
         <div class="ctl-wrap ctl-only-mobile">
             <div class="ctl-sec">MOVING &amp; LOOKING</div>
@@ -581,7 +583,7 @@
             <div class="ctl-row"><span class="k">JT</span><span>jumpthrow bind (full)</span></div>
             <div class="ctl-row"><span class="k">jump + THROW</span><span>manual jumpthrow</span></div>
             <div class="ctl-sec">AFTER THE THROW</div>
-            <div class="ctl-row"><span class="k">SMOKE CAM</span><span>the camera follows your smoke fullscreen — tap ✕ SMOKE CAM to return</span></div>
+            <div class="ctl-row"><span class="k">SMOKE CAM</span><span>a cam follows your smoke after the throw — fullscreen (tap ✕ to return) or a corner window, pick in the ☰ menu</span></div>
             <div class="ctl-row"><span class="k">↩ RETRY</span><span>teleport back to the exact spot + aim of your last throw</span></div>
             <div class="ctl-row"><span class="k">SPAWN ↻</span><span>respawn on the NEXT spawn slot — cycles all real match spawns (pick one from the map in the pause menu)</span></div>
             <div class="ctl-row"><span class="k">📌 SAVE</span><span>save your last throw as a lineup</span></div>
@@ -671,6 +673,12 @@
             <span class="lbl">SENSITIVITY</span>
             <input type="range" id="sens-range" min="0.1" max="8" step="0.05">
             <input id="sens-num" spellcheck="false" inputmode="decimal" title="CS2 sensitivity — same number you use in game">
+        </div>
+
+        <div class="sens-row">
+            <span class="lbl">SMOKE CAM</span>
+            <button class="pill sm" id="followcam-toggle">WINDOW</button>
+            <span class="pt-hint">follows your smoke after a throw — fullscreen, or a small window in the corner</span>
         </div>
 
         <div id="spawn-tools">
