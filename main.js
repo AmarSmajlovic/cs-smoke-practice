@@ -15,6 +15,8 @@ if (isMobile) document.body.classList.add('mobile');
 
 let gameState = 'menu'; // menu | loading | playing | paused
 let spawnChoice = 'T';
+let spawnIndex = 0;      // which spawn slot of the side we're on (R cycles)
+let spawnYawDeg = null;  // the slot's real facing angle (game yaw, degrees)
 let mapDef = null;
 let map = null;
 let currentMapKey = null;
@@ -238,7 +240,11 @@ function findSpawn() {
     // Preferred: real spawn location for the chosen side. The ray uses the
     // GRENADE collider (no player clips — those roof the spawns in the game
     // hulls) and starts below the sky plane.
-    const s = mapDef.spawns && mapDef.spawns[spawnChoice];
+    let s = mapDef.spawns && mapDef.spawns[spawnChoice];
+    if (Array.isArray(s)) {
+        s = s[((spawnIndex % s.length) + s.length) % s.length];
+        spawnYawDeg = s.yaw ?? null;
+    }
     if (s) {
         const startY = Math.min(box.max.y + 10, 400);
         const hit = mapLoader.raycastNade(new THREE.Vector3(s.x, startY, s.z), down, startY - box.min.y + 20);
@@ -318,9 +324,10 @@ async function startGame(mapKey) {
     }
 
     setLoadProgress(100);
-    findSpawn();
-    player.spawn(spawnPoint.x, spawnPoint.y, spawnPoint.z);
-    player.getEyePosition(camera.position);
+    spawnIndex = 0;
+    radarShots = { T: null, CT: null }; // new map -> new top-down shots
+    respawnAtSpawn();
+    renderSpawnRadar();
 
     hide('loading');
     show('crosshair');
@@ -389,16 +396,8 @@ function backToMenu() {
 document.querySelector('.map-card.playable[data-map="mirage"]').addEventListener('click', () => {
     if (gameState === 'menu') startGame('mirage');
 });
-$('spawn-t').addEventListener('click', () => {
-    spawnChoice = 'T';
-    $('spawn-t').classList.add('active');
-    $('spawn-ct').classList.remove('active');
-});
-$('spawn-ct').addEventListener('click', () => {
-    spawnChoice = 'CT';
-    $('spawn-ct').classList.add('active');
-    $('spawn-t').classList.remove('active');
-});
+$('spawn-t').addEventListener('click', () => setSpawnSide('T'));
+$('spawn-ct').addEventListener('click', () => setSpawnSide('CT'));
 $('btn-resume').addEventListener('click', resumeGame);
 $('btn-menu').addEventListener('click', backToMenu);
 
@@ -601,6 +600,10 @@ document.addEventListener('keydown', (e) => {
     // CS2-style ESC: the same key closes the pause menu again. (The browser
     // eats the ESC that exits pointer lock, so this only ever fires while the
     // menu is already open; the lock cooldown is handled by pointerlockerror.)
+    if (e.key === 'Escape' && !$('controls-modal').classList.contains('hidden')) {
+        $('controls-modal').classList.add('hidden'); // back to the pause menu
+        return;
+    }
     if (e.key === 'Escape' && gameState === 'paused' && map && !isMobile) resumeGame();
     const k = e.key.toLowerCase();
     if (k in keys) keys[k] = true;
@@ -619,7 +622,8 @@ document.addEventListener('keydown', (e) => {
     if (e.code === 'KeyN') solveAimFromHere(e.shiftKey ? 0.5 : e.altKey ? 0.0 : 1.0);
     if (e.code === 'KeyP') copyPos();
     if (k === 'c') { grenades.clearAllSmokes(); clearAimHelper(); }
-    if (k === 'r') { player.spawn(spawnPoint.x, spawnPoint.y, spawnPoint.z); playerFrozen = false; }
+    if (k === 'r') respawnAtSpawn(true);
+    if (k === 't') retryLastThrow();
     if (k === 'v') player.noclip = !player.noclip;
     if (k === 'l') saveLastThrow();
 });
@@ -689,13 +693,18 @@ function pipFollow(nade) {
     pip.holdUntil = 0;
     // start at the thrower's eye so the chase eases out of the player's view
     pipCam.position.copy(camera.position);
-    pipFrame.classList.add('on');
+    // phones: the PiP window is too small to read — the smoke cam takes the
+    // whole screen instead (see animate), with a ✕ to bail out early
+    if (isMobile) $('followcam-exit').classList.remove('hidden');
+    else pipFrame.classList.add('on');
 }
 
 function pipStop() {
     pip.nade = null;
     pipFrame.classList.remove('on');
+    $('followcam-exit').classList.add('hidden');
 }
+$('followcam-exit').addEventListener('click', pipStop);
 
 function updatePip(delta) {
     if (!pip.nade) return;
@@ -735,7 +744,9 @@ function renderPip() {
     renderer.setScissorTest(true);
     renderer.setViewport(r.left, y, r.width, r.height);
     renderer.setScissor(r.left, y, r.width, r.height);
+    camera.visible = false; // keep the viewmodel arms out of the smoke cam
     renderer.render(scene, pipCam);
+    camera.visible = true;
     renderer.setScissorTest(false);
     renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
 }
@@ -886,6 +897,136 @@ function getposString() {
     const gYaw = THREE.MathUtils.radToDeg(Math.atan2(-Math.sin(_euler.y), -Math.cos(_euler.y)));
     const p = player.position;
     return `setpos ${p.z.toFixed(2)} ${p.x.toFixed(2)} ${(p.y + CS2.eyeStand).toFixed(2)}; setang ${gPitch.toFixed(2)} ${gYaw.toFixed(2)} 0.00`;
+}
+
+// R: respawn on the NEXT real spawn slot of the chosen side, facing the
+// slot's actual spawn angle — cycling through them is how you verify an
+// instant smoke works from every spawn you can get in a match.
+function respawnAtSpawn(next = false) {
+    const list = mapDef && mapDef.spawns && mapDef.spawns[spawnChoice];
+    const n = Array.isArray(list) ? list.length : 0;
+    if (next && n > 1) spawnIndex++;
+    pipStop(); // leaving for a spawn ends the smoke chase cam
+    findSpawn();
+    player.spawn(spawnPoint.x, spawnPoint.y, spawnPoint.z);
+    if (spawnYawDeg !== null) {
+        const gYaw = spawnYawDeg * Math.PI / 180;
+        camera.rotation.order = 'YXZ';
+        camera.rotation.set(0, Math.atan2(-Math.sin(gYaw), -Math.cos(gYaw)), 0);
+    }
+    player.getEyePosition(camera.position);
+    playerFrozen = false;
+    if (n > 1) toast(`${spawnChoice} spawn ${(spawnIndex % n) + 1}/${n}`);
+    updateRadarActive();
+}
+
+// Spawn picker: a top-down snapshot of the chosen side's spawn BASE with a
+// pin per real spawn slot — framed on the cluster so the pins stay big and
+// readable instead of a dot cloud on the whole map. Rendered from the live
+// scene with an orthographic camera, so pixel->world mapping is exact — no
+// radar-scale guessing, and it works unchanged for any future map.
+let radarShots = { T: null, CT: null };
+function makeRadarShot(side) {
+    const list = mapDef && mapDef.spawns && mapDef.spawns[side];
+    if (!map || !Array.isArray(list) || !list.length) return null;
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const s of list) {
+        minX = Math.min(minX, s.x); maxX = Math.max(maxX, s.x);
+        minZ = Math.min(minZ, s.z); maxZ = Math.max(maxZ, s.z);
+    }
+    const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
+    const half = Math.max(maxX - minX, maxZ - minZ) / 2 + 200; // context margin
+    const box = new THREE.Box3().setFromObject(map);
+    const cam = new THREE.OrthographicCamera(-half, half, half, -half, 10, box.max.y - box.min.y + 500);
+    cam.position.set(cx, box.max.y + 250, cz);
+    // image top = -z, image right = +x; per-map list flips a side 180 deg
+    const flip = (mapDef.radarRot180 || []).includes(side);
+    cam.up.set(0, 0, flip ? 1 : -1);
+    cam.lookAt(cx, box.min.y, cz);
+    const r = new THREE.WebGLRenderer({ antialias: true });
+    r.setSize(512, 512);
+    r.outputColorSpace = renderer.outputColorSpace;
+    r.toneMapping = renderer.toneMapping;
+    camera.visible = false; // keep the viewmodel out of the shot
+    r.render(scene, cam);
+    camera.visible = true;
+    radarShots[side] = { url: r.domElement.toDataURL('image/jpeg', 0.85), cx, cz, half, flip };
+    r.dispose();
+    return radarShots[side];
+}
+
+function renderSpawnRadar() {
+    const wrap = $('spawn-radar');
+    const tools = $('spawn-tools');
+    const spawns = mapDef && mapDef.spawns;
+    if (!wrap || !spawns || !Array.isArray(spawns[spawnChoice])) { if (tools) tools.classList.add('hidden'); return; }
+    tools.classList.remove('hidden');
+    $('pspawn-t').classList.toggle('active', spawnChoice === 'T');
+    $('pspawn-ct').classList.toggle('active', spawnChoice === 'CT');
+    const key = `${currentMapKey}:${spawnChoice}`;
+    if (wrap.dataset.key !== key) {
+        const shot = radarShots[spawnChoice] || makeRadarShot(spawnChoice);
+        if (!shot) return;
+        wrap.innerHTML = `<img src="${shot.url}" alt="spawn area">`;
+        const toPct = (v, c) => {
+            const p = ((v - (c - shot.half)) / (2 * shot.half)) * 100;
+            return (shot.flip ? 100 - p : p).toFixed(2) + '%'; // 180-deg views mirror both axes
+        };
+        spawns[spawnChoice].forEach((s, i) => {
+            const b = document.createElement('button');
+            b.className = `spawn-pin ${spawnChoice.toLowerCase()}`;
+            b.dataset.side = spawnChoice;
+            b.dataset.i = i;
+            b.textContent = i + 1;
+            b.title = `${spawnChoice} spawn ${i + 1}`;
+            b.style.left = toPct(s.x, shot.cx);
+            b.style.top = toPct(s.z, shot.cz);
+            b.addEventListener('click', () => {
+                spawnIndex = i;
+                respawnAtSpawn();
+                resumeGame();
+            });
+            wrap.appendChild(b);
+        });
+        wrap.dataset.key = key;
+    }
+    updateRadarActive();
+}
+
+// pause-menu side toggle, kept in sync with the landing page pills
+function setSpawnSide(side) {
+    if (spawnChoice !== side) { spawnChoice = side; spawnIndex = 0; }
+    $('spawn-t').classList.toggle('active', side === 'T');
+    $('spawn-ct').classList.toggle('active', side === 'CT');
+    if (map) { respawnAtSpawn(); renderSpawnRadar(); }
+}
+$('pspawn-t').addEventListener('click', () => setSpawnSide('T'));
+$('pspawn-ct').addEventListener('click', () => setSpawnSide('CT'));
+
+// controls / help modal, opened from the pause menu
+$('btn-controls').addEventListener('click', () => $('controls-modal').classList.remove('hidden'));
+$('controls-close').addEventListener('click', () => $('controls-modal').classList.add('hidden'));
+
+function updateRadarActive() {
+    const wrap = $('spawn-radar');
+    if (!wrap || !wrap.dataset.map) return;
+    const list = mapDef && mapDef.spawns && mapDef.spawns[spawnChoice];
+    const n = Array.isArray(list) ? list.length : 1;
+    for (const pin of wrap.querySelectorAll('.spawn-pin')) {
+        pin.classList.toggle('active',
+            pin.dataset.side === spawnChoice && +pin.dataset.i === ((spawnIndex % n) + n) % n);
+    }
+}
+
+// T: teleport back to the exact spot + aim of your LAST throw (the smoke
+// re-arms on its own) — throw, watch where it lands, T, adjust, again.
+function retryLastThrow() {
+    if (!lastThrow || lastThrow.map !== currentMapKey) { toast('Throw a smoke first'); return; }
+    pipStop();
+    player.spawn(lastThrow.x, lastThrow.y, lastThrow.z);
+    camera.quaternion.setFromEuler(new THREE.Euler(lastThrow.pitch, lastThrow.yaw, 0, 'YXZ'));
+    player.getEyePosition(camera.position);
+    toast('↩ back at your last throw spot');
 }
 
 function copyPos() {
@@ -1098,7 +1239,8 @@ function setupMobileButtons() {
     press('btn-clear', () => { grenades.clearAllSmokes(); clearAimHelper(); });
     press('btn-pause', () => { if (gameState === 'playing') pauseGame(); });
     press('btn-fly', () => { player.noclip = !player.noclip; $('btn-fly').classList.toggle('act', player.noclip); });
-    press('btn-respawn', () => { player.spawn(spawnPoint.x, spawnPoint.y, spawnPoint.z); playerFrozen = false; });
+    press('btn-respawn', () => respawnAtSpawn(true));
+    press('btn-retry', () => retryLastThrow());
     press('btn-savelu', () => saveLastThrow());
     press('btn-jt', () => scriptedJumpthrow('bind'));
 }
@@ -1373,8 +1515,17 @@ function animate() {
     }
 
     tickSetposHold();
-    renderer.render(scene, camera);
-    renderPip();
+    if (isMobile && pip.nade) {
+        // mobile smoke cam: fullscreen chase instead of a tiny PiP window
+        pipCam.aspect = window.innerWidth / window.innerHeight;
+        pipCam.updateProjectionMatrix();
+        camera.visible = false; // keep the viewmodel arms out of the shot
+        renderer.render(scene, pipCam);
+        camera.visible = true;
+    } else {
+        renderer.render(scene, camera);
+        renderPip();
+    }
 }
 
 animate();

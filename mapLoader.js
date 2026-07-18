@@ -33,11 +33,34 @@ export const MAPS = {
         // Node names carry the game's collision groups: physics_group_*,
         // physics_csgo_grenadeclip, physics_npcclip_playerclip, physics_sky…
         collisionPath: `${ASSET_BASE}/mirage-collision.glb`,
-        // buyzone centers extracted from the VRF physics export (world HU x/z)
+        // The REAL competitive spawn slots (priority-0 info_player_* entities
+        // from de_mirage default_ents, extracted via Source2Viewer) so instant
+        // smokes can be practiced from every spawn you can actually get in a
+        // match. App frame: x = game Y, z = game X; yaw = game yaw degrees.
         spawns: {
-            T: { x: -136, z: 1248 },
-            CT: { x: -1864, z: -1824 },
+            T: [
+                { x: -352, z: 1296, yaw: 227 },
+                { x: -307, z: 1216, yaw: 270 },
+                { x: -256, z: 1136, yaw: 270 },
+                { x: -211, z: 1216, yaw: 270 },
+                { x: -160, z: 1136, yaw: 270 },
+                { x: -115, z: 1216, yaw: 90 },
+                { x: -64, z: 1136, yaw: 90 },
+                { x: -16, z: 1216, yaw: 90 },
+                { x: 32, z: 1296, yaw: 141 },
+                { x: 32, z: 1136, yaw: 90 },
+            ],
+            CT: [
+                { x: -1976, z: -1776, yaw: 331 },
+                { x: -1976, z: -1656, yaw: 299 },
+                { x: -1896, z: -1720, yaw: 50 },
+                { x: -1800, z: -1776, yaw: 36 },
+                { x: -1800, z: -1656, yaw: 94 },
+            ],
         },
+        // spawn-picker snapshot orientation: sides whose base reads upside
+        // down with the default framing get rotated 180 degrees
+        radarRot180: ['CT'],
     },
     dust2: { name: 'de_dust2', path: '/maps/dust2.glb', targetSize: 4300, zUp: false },
 };

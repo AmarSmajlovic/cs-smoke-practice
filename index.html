@@ -229,6 +229,46 @@
         .sens-row input[type="range"] { flex: 1; accent-color: var(--accent); }
         /* position tools: your spot as a copyable setpos + a paste-to-teleport box */
         #pos-tools { width: min(560px, 92vw); margin-top: 18px; }
+        #spawn-tools { width: min(400px, 92vw); margin-top: 18px; }
+        #followcam-exit {
+            position: fixed; top: max(10px, env(safe-area-inset-top)); left: 50%;
+            transform: translateX(-50%); z-index: 15;
+            padding: 10px 20px; border-radius: 24px;
+            background: rgba(12, 14, 18, .72); border: 1px solid #3a414c;
+            color: #fff; font-weight: 800; font-size: 13px; letter-spacing: 1px;
+            cursor: pointer; user-select: none; -webkit-user-select: none;
+        }
+        /* ---------- controls modal ---------- */
+        #controls-modal { z-index: 30; overflow-y: auto; justify-content: flex-start; padding: 32px 16px; }
+        #controls-modal h2 { margin-bottom: 18px; }
+        .ctl-wrap { width: min(560px, 94vw); text-align: left; }
+        .ctl-sec { color: var(--accent); font-size: 11.5px; letter-spacing: 2px; font-weight: 800; margin: 18px 0 8px; }
+        .ctl-row { display: flex; gap: 12px; align-items: baseline; padding: 4px 0; font-size: 13.5px; color: var(--muted); }
+        .ctl-row .k { flex: 0 0 148px; color: var(--text); font-weight: 700; font-family: ui-monospace, monospace; font-size: 12.5px; }
+        .ctl-only-mobile { display: none; }
+        body.mobile .ctl-only-desktop { display: none; }
+        body.mobile .ctl-only-mobile { display: block; }
+        #controls-close { margin-top: 22px; }
+        .st-head { display: flex; align-items: center; justify-content: space-between; }
+        .pill.sm { padding: 4px 14px; font-size: 12px; }
+        .st-side { display: flex; gap: 6px; }
+        #spawn-radar {
+            position: relative; width: 100%; border-radius: 10px; overflow: hidden;
+            border: 1px solid #2c323b; background: #14171c;
+        }
+        #spawn-radar img { display: block; width: 100%; filter: saturate(.85) brightness(.9); }
+        .spawn-pin {
+            position: absolute; transform: translate(-50%, -50%);
+            width: 21px; height: 21px; border-radius: 50%;
+            font-size: 11px; font-weight: 800; line-height: 1;
+            display: flex; align-items: center; justify-content: center;
+            border: 1px solid rgba(0,0,0,.5); cursor: pointer; padding: 0;
+            transition: transform .08s;
+        }
+        .spawn-pin:hover { transform: translate(-50%, -50%) scale(1.25); z-index: 2; }
+        .spawn-pin.t { background: var(--accent); color: #191100; }
+        .spawn-pin.ct { background: #4aa3ff; color: #041220; }
+        .spawn-pin.active { outline: 2px solid #fff; z-index: 1; }
         .pt-head {
             color: var(--muted); font-size: 11.5px; letter-spacing: 2px;
             font-weight: 800; margin-bottom: 8px; text-align: left;
@@ -484,13 +524,66 @@
         <span class="kb"><kbd>M</kbd> target</span>
         <span class="kb"><kbd>N</kbd> aim</span>
         <span class="kb"><kbd>P</kbd> copy pos</span>
+        <span class="kb"><kbd>L</kbd> save lineup</span>
         <span class="kb"><kbd>V</kbd> fly</span>
         <span class="kb"><kbd>C</kbd> clear</span>
-        <span class="kb"><kbd>R</kbd> respawn</span>
+        <span class="kb"><kbd>R</kbd> next spawn</span>
+        <span class="kb"><kbd>T</kbd> retry throw</span>
         <span class="kb"><kbd>ESC</kbd> menu</span>
     </div>
     <div id="nade-crosshair"><i class="v"></i><i class="h"></i></div>
     <div id="pip-frame"><span class="tag">SMOKE CAM</span></div>
+    <div id="followcam-exit" class="hidden">✕ SMOKE CAM</div>
+
+    <!-- CONTROLS / HELP -->
+    <div id="controls-modal" class="overlay hidden">
+        <h2>CONTROLS</h2>
+        <div class="ctl-wrap ctl-only-desktop">
+            <div class="ctl-sec">THROWING</div>
+            <div class="ctl-row"><span class="k">LMB</span><span>full throw (left click)</span></div>
+            <div class="ctl-row"><span class="k">RMB</span><span>lob — the short right-click throw</span></div>
+            <div class="ctl-row"><span class="k">LMB+RMB</span><span>medium throw (hold both, release)</span></div>
+            <div class="ctl-row"><span class="k">F</span><span>jumpthrow bind — full throw, exactly like a CS2 bind</span></div>
+            <div class="ctl-row"><span class="k">SHIFT+F</span><span>medium jumpthrow (only while standing still — moving throws stay FULL, like in game)</span></div>
+            <div class="ctl-row"><span class="k">ALT+F</span><span>lob jumpthrow</span></div>
+            <div class="ctl-row"><span class="k">4</span><span>holster / draw the smoke</span></div>
+            <div class="ctl-sec">MOVEMENT</div>
+            <div class="ctl-row"><span class="k">W A S D</span><span>move</span></div>
+            <div class="ctl-row"><span class="k">SHIFT</span><span>walk (silent, slower)</span></div>
+            <div class="ctl-row"><span class="k">CTRL</span><span>crouch</span></div>
+            <div class="ctl-row"><span class="k">SPACE</span><span>jump</span></div>
+            <div class="ctl-row"><span class="k">V</span><span>noclip — fly through the map</span></div>
+            <div class="ctl-sec">PRACTICE TOOLS</div>
+            <div class="ctl-row"><span class="k">R</span><span>respawn on the NEXT spawn slot — cycles all real match spawns (pick one from the map in the pause menu)</span></div>
+            <div class="ctl-row"><span class="k">T</span><span>teleport back to the exact spot + aim of your last throw</span></div>
+            <div class="ctl-row"><span class="k">L</span><span>save your last throw as a lineup (list in the pause menu)</span></div>
+            <div class="ctl-row"><span class="k">C</span><span>clear all smokes and trails</span></div>
+            <div class="ctl-row"><span class="k">P</span><span>copy your position as a CS2 setpos — works in the game console too</span></div>
+            <div class="ctl-row"><span class="k">M</span><span>mark the spot you're aiming at as a target</span></div>
+            <div class="ctl-row"><span class="k">N</span><span>auto-aim a throw at the target from where you stand (SHIFT = medium, ALT = lob)</span></div>
+            <div class="ctl-row"><span class="k">ESC</span><span>pause menu — sensitivity, spawns, teleport, saved lineups</span></div>
+        </div>
+        <div class="ctl-wrap ctl-only-mobile">
+            <div class="ctl-sec">MOVING &amp; LOOKING</div>
+            <div class="ctl-row"><span class="k">▲▼◀▶</span><span>move — slide your finger for diagonals</span></div>
+            <div class="ctl-row"><span class="k">right side</span><span>drag to look around</span></div>
+            <div class="ctl-sec">THROWING</div>
+            <div class="ctl-row"><span class="k">THROW</span><span>full throw</span></div>
+            <div class="ctl-row"><span class="k">MED</span><span>medium throw</span></div>
+            <div class="ctl-row"><span class="k">LOB</span><span>short throw</span></div>
+            <div class="ctl-row"><span class="k">JT</span><span>jumpthrow bind (full)</span></div>
+            <div class="ctl-row"><span class="k">jump + THROW</span><span>manual jumpthrow</span></div>
+            <div class="ctl-sec">AFTER THE THROW</div>
+            <div class="ctl-row"><span class="k">SMOKE CAM</span><span>the camera follows your smoke fullscreen — tap ✕ SMOKE CAM to return</span></div>
+            <div class="ctl-row"><span class="k">↩ RETRY</span><span>teleport back to the exact spot + aim of your last throw</span></div>
+            <div class="ctl-row"><span class="k">SPAWN ↻</span><span>respawn on the NEXT spawn slot — cycles all real match spawns (pick one from the map in the pause menu)</span></div>
+            <div class="ctl-row"><span class="k">📌 SAVE</span><span>save your last throw as a lineup</span></div>
+            <div class="ctl-row"><span class="k">CLEAR</span><span>clear all smokes and trails</span></div>
+            <div class="ctl-row"><span class="k">FLY</span><span>noclip — fly through the map</span></div>
+            <div class="ctl-row"><span class="k">☰</span><span>pause menu — sensitivity, spawns, teleport, saved lineups</span></div>
+        </div>
+        <button class="btn primary" id="controls-close">CLOSE</button>
+    </div>
 
     <div id="throw-help" class="hidden">
         <div class="th-row" id="th-full"><span class="mouse"><span class="mb l on"></span><span class="mb r"></span></span> FULL THROW</div>
@@ -563,6 +656,7 @@
         <h2>PAUSED</h2>
         <div class="btns">
             <button class="btn primary" id="btn-resume">RESUME</button>
+            <button class="btn ghost" id="btn-controls">❓ CONTROLS</button>
             <button class="btn ghost" id="btn-menu">MAIN MENU</button>
         </div>
 
@@ -570,6 +664,17 @@
             <span class="lbl">SENSITIVITY</span>
             <input type="range" id="sens-range" min="0.1" max="8" step="0.05">
             <input id="sens-num" spellcheck="false" inputmode="decimal" title="CS2 sensitivity — same number you use in game">
+        </div>
+
+        <div id="spawn-tools">
+            <div class="pt-head st-head">
+                <span>🎯 SPAWNS — CLICK A PIN</span>
+                <span class="st-side">
+                    <button class="pill sm" id="pspawn-t">T</button>
+                    <button class="pill sm" id="pspawn-ct">CT</button>
+                </span>
+            </div>
+            <div id="spawn-radar"></div>
         </div>
 
         <div id="pos-tools">
@@ -596,13 +701,14 @@
         <div class="keys-hint desktop-hint">
             <b>WASD</b> move &nbsp; <b>SHIFT</b> walk &nbsp; <b>CTRL</b> crouch &nbsp; <b>SPACE</b> jump<br>
             <b>LMB</b> full &nbsp; <b>RMB</b> lob &nbsp; <b>LMB+RMB</b> or <b>SHIFT+LMB</b> medium &nbsp; <b>ALT+LMB</b> lob &nbsp; <b>F</b> = <b>jumpthrow</b> (SHIFT/ALT picks type while standing — moving always throws FULL)<br>
-            thrown nades leave a <b>trail</b> &nbsp; <b>P</b> copy your position &nbsp; <b>V</b> noclip (fly) &nbsp; <b>C</b> clear smokes+trails &nbsp; <b>R</b> respawn
+            thrown nades leave a <b>trail</b> &nbsp; <b>P</b> copy your position &nbsp; <b>V</b> noclip (fly) &nbsp; <b>C</b> clear smokes+trails<br>
+            <b>R</b> cycle the REAL match spawns (practice instant smokes from every slot) &nbsp; <b>T</b> teleport back to your last throw spot
         </div>
         <div class="keys-hint mobile-hint">
             <b>▲▼◀▶</b> move (slide finger for diagonals)<br>
             drag the <b>right side</b> of the screen to look around<br>
             <b>THROW</b> full &nbsp; <b>MED</b> medium &nbsp; <b>LOB</b> short &nbsp; <b>JT</b> jumpthrow &nbsp; jump + click = manual jumpthrow<br>
-            <b>CLEAR</b> smokes+trails &nbsp; <b>FLY</b> noclip &nbsp; <b>RESPAWN</b> back to spawn &nbsp; <b>📌 SAVE</b> lineup &nbsp; <b>☰</b> pause
+            <b>CLEAR</b> smokes+trails &nbsp; <b>FLY</b> noclip &nbsp; <b>SPAWN ↻</b> cycle match spawns &nbsp; <b>↩ RETRY</b> back to last throw &nbsp; <b>📌 SAVE</b> lineup &nbsp; <b>☰</b> pause
         </div>
     </div>
 
@@ -623,7 +729,8 @@
         <div id="mob-top">
             <div class="mbtn2" id="btn-savelu">📌 SAVE</div>
             <div class="mbtn2" id="btn-fly">FLY</div>
-            <div class="mbtn2" id="btn-respawn">RESPAWN</div>
+            <div class="mbtn2" id="btn-respawn">SPAWN ↻</div>
+            <div class="mbtn2" id="btn-retry">↩ RETRY</div>
             <div class="mbtn2" id="btn-clear">CLEAR</div>
         </div>
         <div class="mbtn" id="btn-pause">☰</div>
