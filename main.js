@@ -77,7 +77,9 @@ _pmrem.dispose();
 
 // ---------------------------------------------------------------- Look controls
 const controls = new PointerLockControls(camera, renderer.domElement);
+let lastUnlockAt = -1e9; // browsers refuse pointer lock ~1.4s after ESC exits it
 controls.addEventListener('unlock', () => {
+    lastUnlockAt = performance.now();
     if (gameState === 'playing') pauseGame();
 });
 // Desktop resume completes only when the pointer actually locks — browsers
@@ -90,7 +92,8 @@ controls.addEventListener('lock', () => {
 });
 document.addEventListener('pointerlockerror', () => {
     if (gameState === 'paused') {
-        document.querySelector('#resume h2').textContent = 'WAIT A SECOND, THEN PRESS ESC OR CLICK';
+        // the timed retry missed the cooldown window — one more click does it
+        document.querySelector('#resume h2').textContent = 'ONE MOMENT — CLICK RESUME AGAIN';
     }
 });
 
@@ -368,10 +371,23 @@ function showResume(title) {
     show('resume');
 }
 
+let resumeTimer = 0;
 function resumeGame() {
     if (isMobile) {
         hide('resume');
         gameState = 'playing';
+        return;
+    }
+    // Browsers enforce a ~1.4s cooldown on pointer lock after ESC released
+    // it. Instead of letting the request fail with a scary message, wait out
+    // whatever remains of the cooldown and lock automatically.
+    const wait = 1450 - (performance.now() - lastUnlockAt);
+    clearTimeout(resumeTimer);
+    if (wait > 0) {
+        document.querySelector('#resume h2').textContent = 'RESUMING…';
+        resumeTimer = setTimeout(() => {
+            if (gameState === 'paused' && map) controls.lock();
+        }, wait);
         return;
     }
     // stays paused until the 'lock' event actually fires (see listener above)
