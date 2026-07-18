@@ -229,7 +229,12 @@ export class GrenadeSystem {
                 const eN = THREE.MathUtils.lerp(tuning.elasticityVert, CS2.nadeElasticityHot, hot);
                 vel.copy(_bounceT).multiplyScalar(eT)
                     .addScaledVector(_normal, -into * eN);
-                if (vel.y > CS2.nadeBounceVyCap) vel.y = CS2.nadeBounceVyCap;
+                // The rebound cap models Source's hot FLOOR impacts ("3 small
+                // hops") — on a WALL the vertical component is TANGENTIAL and
+                // demos keep it at the plain 0.45-0.49 (259 measured wall
+                // bounces). Capping it too crushed high wall-bounce lineups
+                // (csnades Left Arch: needs 282 u/s up off the wall).
+                if (_normal.y > 0.7 && vel.y > CS2.nadeBounceVyCap) vel.y = CS2.nadeBounceVyCap;
 
                 const isFloor = _normal.y > 0.7;
                 const speed = vel.length();

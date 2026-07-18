@@ -113,4 +113,33 @@ for (const [name, list, th] of CHECKS) {
     if (!ok) failed = true;
     console.log(`${ok ? 'PASS' : 'FAIL'}  ${name.padEnd(9)} n=${m.n}  median ${m.med.toFixed(0)}u (max ${th.med})  <=50u ${m.in50.toFixed(0)}% (min ${th.in50}%)`);
 }
-process.exit(failed ? 1 : 0);
+
+// ---- csnades machine reference: "Left Arch from Back Alley" ----
+// setpos -731.51 524.03 -16.63; setang -34.36 140.79, crouched jump+LMB.
+// Ground truth (user-verified vs the csnades video): wall bounce -> DIRECT
+// arc -> first touch game (-1213.9, 364.4, ~128) -> drops off the edge ->
+// bounces on the short floor (z ~ -166) and rests there.
+{
+    const feet = new THREE.Vector3(524.029297, -16.634758 - CS2.eyeStand, -731.505981);
+    const rT = CS2.jumpthrowReleaseTime;
+    const gYawL = 140.792618 * Math.PI / 180;
+    const oYawL = Math.atan2(-Math.sin(gYawL), -Math.cos(gYawL));
+    const fwdHL = new THREE.Vector3(-Math.sin(oYawL), 0, -Math.cos(oYawL));
+    const eye = new THREE.Vector3(feet.x, feet.y + CS2.eyeCrouch + CS2.jumpImpulse * rT - 0.5 * CS2.gravity * rT * rT, feet.z);
+    const vel = new THREE.Vector3(0, CS2.jumpImpulse - CS2.gravity * rT, 0);
+    const p2 = new THREE.Vector3(), v2 = new THREE.Vector3();
+    grenades.computeThrow(eye.clone(), fwdHL, -34.362362, 1.0, vel, p2, v2);
+    const nade = { position: p2, velocity: v2, rolling: false, age: 0 };
+    const touchWant = new THREE.Vector3(364.4, 128, -1213.9);
+    let touch = null, prevVy = v2.y;
+    while (grenades.stepProjectile(nade, CS2.TICK, false)) {
+        if (!touch && prevVy < -100 && v2.y > 0 && p2.y > 90 && p2.y < 150) touch = p2.clone();
+        prevVy = v2.y;
+    }
+    const touchErr = touch ? Math.hypot(touch.x - touchWant.x, touch.z - touchWant.z) : Infinity;
+    const restOnFloor = p2.y < -140;
+    const ok = touchErr <= 60 && restOnFloor;
+    if (!ok) failed = true;
+    console.log(`${ok ? 'PASS' : 'FAIL'}  left-arch  touch ${touch ? `(${touch.z.toFixed(0)}, ${touch.x.toFixed(0)})` : 'NIKAD'} err ${touchErr.toFixed(0)}u (max 60)  rest z=${p2.y.toFixed(0)} (mora < -140, na podu shorta)`);
+    process.exitCode = failed ? 1 : 0;
+}

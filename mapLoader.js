@@ -414,21 +414,47 @@ export class MapLoader {
             // otherwise land ON the sky ("born in the air").
             if (!isGrenadeClip && !isSky) playerGeos.push(stripped);
             if (!isPlayerClip && !isGlass && !isSky) {
+                // Invisible physics seals over sparse visual geometry that CS2
+                // grenades demonstrably pass (csnades "Left Arch from Back
+                // Alley": the nade flies over the arch wall and drops straight
+                // through the plank canopy onto top short). NADE collider only.
+                const NADE_PASS_ZONES = [
+                    { minX: 335, maxX: 565, minY: 195, maxY: 305, minZ: -1255, maxZ: -945 },
+                    // the chimney-like block on the top-short walkway: its side
+                    // faces reach below the corridor and swatted throws that
+                    // arrive a hair right of the reference line
+                    { minX: 385, maxX: 485, minY: 130, maxY: 305, minZ: -1195, maxZ: -1085 },
+                    // the 30u stub on the touch-down tile that deflected
+                    // arriving throws sideways (floor centroids sit below 118)
+                    { minX: 312, maxX: 348, minY: 118, maxY: 148, minZ: -1232, maxZ: -1198 },
+                ];
                 // same story for the invisible "world top" faces (~y 700)
                 // hiding inside regular world groups — real smokes cross that
                 // height band freely, so drop those faces from the collider
                 let g2 = stripped;
                 const pos2 = stripped.attributes.position;
-                let hasHigh = false;
-                for (let i = 1; i < pos2.count * 3; i += 3) {
-                    if (pos2.array[i] > 650) { hasHigh = true; break; }
+                const inZone = (x, y, z) => NADE_PASS_ZONES.some((b) =>
+                    x >= b.minX && x <= b.maxX && y >= b.minY && y <= b.maxY && z >= b.minZ && z <= b.maxZ);
+                let needsFilter = false;
+                for (let i = 0; i < pos2.count * 3; i += 3) {
+                    if (pos2.array[i + 1] > 650 || inZone(pos2.array[i], pos2.array[i + 1], pos2.array[i + 2])) { needsFilter = true; break; }
                 }
-                if (hasHigh) {
+                if (needsFilter) {
                     const kept = [];
                     for (let f = 0; f < pos2.count; f += 3) {
-                        const y0 = pos2.array[f * 3 + 1], y1 = pos2.array[f * 3 + 4], y2 = pos2.array[f * 3 + 7];
+                        const a = pos2.array, o = f * 3;
+                        const y0 = a[o + 1], y1 = a[o + 4], y2 = a[o + 7];
                         if (y0 > 650 && y1 > 650 && y2 > 650) continue; // ceiling face
-                        for (let k = 0; k < 9; k++) kept.push(pos2.array[f * 3 + k]);
+                        // centroid rule: collision hulls use huge triangles, so
+                        // requiring every vertex inside a zone lets slabs that
+                        // merely CROSS it survive (the sloped hull over the
+                        // short arches spans 240u). The floor below a zone's
+                        // bottom stays safe: its centroids sit under minY.
+                        const cx = (a[o] + a[o + 3] + a[o + 6]) / 3;
+                        const cy = (y0 + y1 + y2) / 3;
+                        const cz = (a[o + 2] + a[o + 5] + a[o + 8]) / 3;
+                        if (inZone(cx, cy, cz)) continue;
+                        for (let k = 0; k < 9; k++) kept.push(a[o + k]);
                     }
                     g2 = new THREE.BufferGeometry();
                     g2.setAttribute('position', new THREE.BufferAttribute(new Float32Array(kept), 3));
