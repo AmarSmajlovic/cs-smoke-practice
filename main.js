@@ -1590,3 +1590,12 @@ window.addEventListener('resize', () => {
     applyFov(); // also sizes the canvas (fullscreen, hor+ FOV)
     updateOrientationClass();
 });
+
+// Cache the big map/model binaries in Cache Storage: mobile browsers evict
+// (or refuse to store) 60MB HTTP-cache entries, so repeat visits kept
+// re-downloading the map even with immutable headers. The SW holds them.
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+    });
+}
