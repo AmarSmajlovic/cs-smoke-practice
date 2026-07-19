@@ -27,6 +27,7 @@ const isPhysics = args.includes('--physics');
 const isCollision = args.includes('--collision');
 const texSize = parseInt(args[args.indexOf('--texsize') + 1]) || 1024;
 const ratio = parseFloat(args[args.indexOf('--ratio') + 1]) || 0.6;
+const quality = parseInt(args[args.indexOf('--quality') + 1]) || 75;
 
 if (!input || !output) {
     console.error('Usage: node optimize-map.mjs <input.glb> <output.glb> [--physics] [--texsize N] [--ratio R]');
@@ -125,7 +126,7 @@ if (isPhysics || isCollision) {
     }
 
     await doc.transform(
-        textureCompress({ encoder: sharp, targetFormat: 'webp', quality: 75, resize: [texSize, texSize] }),
+        textureCompress({ encoder: sharp, targetFormat: 'webp', quality, resize: [texSize, texSize] }),
         prune(),
         quantize(),
     );

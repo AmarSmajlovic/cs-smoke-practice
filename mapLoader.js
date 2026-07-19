@@ -38,7 +38,7 @@ export const MIRAGE_NADE_PASS_ZONES = [
 export const MAPS = {
     mirage: {
         name: 'de_mirage',
-        path: '/maps/mirage.glb',
+        path: '/maps/mirage.glb?v=1',
         sizeMB: 35.1, // progress fallback when the server hides Content-Length
         scale: VRF_SCALE,
         zUp: false,
@@ -46,8 +46,8 @@ export const MAPS = {
         // packed by tools/pack-collision.mjs — already in HU, app axes).
         // Node names carry the game's collision groups: physics_group_*,
         // physics_csgo_grenadeclip, physics_npcclip_playerclip, physics_sky…
-        collisionPath: '/maps/mirage-collision.glb',
-        softGroundPath: '/maps/mirage-softground.json',
+        collisionPath: '/maps/mirage-collision.glb?v=1',
+        softGroundPath: '/maps/mirage-softground.json?v=1',
         nadePassZones: MIRAGE_NADE_PASS_ZONES,
         nadeCeilingY: 650,
         // The REAL competitive spawn slots (priority-0 info_player_* entities
@@ -81,12 +81,12 @@ export const MAPS = {
     },
     dust2: {
         name: 'de_dust2',
-        path: '/maps/dust2.glb',
-        sizeMB: 72.5,
+        path: '/maps/dust2.glb?v=2',
+        sizeMB: 60.0,
         scale: VRF_SCALE,
         zUp: false,
-        collisionPath: '/maps/dust2-collision.glb',
-        softGroundPath: '/maps/dust2-softground.json',
+        collisionPath: '/maps/dust2-collision.glb?v=2',
+        softGroundPath: '/maps/dust2-softground.json?v=2',
         // ground weed/grass sprite cards export as opaque-looking brown
         // crumple; in game they are barely-visible tufts — drop them
         stripVisual: /dust_weeds|weeds_cressa|zebra_grass|sagebrush/i,
