@@ -10,6 +10,13 @@ const page = await browser.newPage();
 await page.setViewport({ width: 1200, height: 630, deviceScaleFactor: 2 });
 await page.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
 await new Promise((r) => setTimeout(r, 2000)); // let thumbs/fonts settle
+await page.evaluate(() => {
+    // dev-only debug GUI must not appear on the share card
+    document.querySelectorAll('.lil-gui').forEach((el) => { el.style.display = 'none'; });
+    // shrink a touch so BOTH playable map cards fit the 1200x630 crop
+    document.body.style.zoom = 0.78;
+});
+await new Promise((r) => setTimeout(r, 400));
 await page.screenshot({ path: out, type: 'jpeg', quality: 88 });
 await browser.close();
 console.log('saved', out);
