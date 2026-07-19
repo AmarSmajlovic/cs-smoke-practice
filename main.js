@@ -1594,7 +1594,13 @@ window.addEventListener('resize', () => {
 // Cache the big map/model binaries in Cache Storage: mobile browsers evict
 // (or refuse to store) 60MB HTTP-cache entries, so repeat visits kept
 // re-downloading the map even with immutable headers. The SW holds them.
-if ('serviceWorker' in navigator) {
+if (import.meta.env.DEV) {
+    // A SW must NEVER run against the Vite dev server — it caches dev assets and
+    // fights HMR, which breaks map loading. Actively tear down any stale one
+    // (e.g. left over from running a production build locally) and its caches.
+    navigator.serviceWorker?.getRegistrations().then((rs) => rs.forEach((r) => r.unregister())).catch(() => {});
+    caches?.keys().then((ks) => ks.forEach((k) => caches.delete(k))).catch(() => {});
+} else if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js').catch(() => {});
     });
