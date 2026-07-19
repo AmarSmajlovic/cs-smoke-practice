@@ -303,6 +303,7 @@ async function startGame(mapKey) {
     gameState = 'loading';
     hide('landing');
     $('load-map-name').textContent = (mapDef.name || mapKey).toUpperCase();
+    document.querySelectorAll('#loading .load-art img').forEach((img) => { img.src = `/thumbs/${mapKey}.jpg`; });
     setLoadProgress(0);
     show('loading');
 
@@ -409,8 +410,10 @@ function backToMenu() {
 }
 
 // Menu wiring — everything lives on the landing; a map card starts the game
-document.querySelector('.map-card.playable[data-map="mirage"]').addEventListener('click', () => {
-    if (gameState === 'menu') startGame('mirage');
+document.querySelectorAll('.map-card.playable[data-map]').forEach((card) => {
+    card.addEventListener('click', () => {
+        if (gameState === 'menu') startGame(card.dataset.map);
+    });
 });
 $('spawn-t').addEventListener('click', () => setSpawnSide('T'));
 $('spawn-ct').addEventListener('click', () => setSpawnSide('CT'));

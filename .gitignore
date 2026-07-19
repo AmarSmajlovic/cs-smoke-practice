@@ -18,3 +18,4 @@ tools/smoke_traj.json
 tools/demo-traj/demotraj
 tools/players.csv
 tools/demo-data/*.traj.json
+exceptions.txt

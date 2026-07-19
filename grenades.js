@@ -246,8 +246,11 @@ export class GrenadeSystem {
                 // crushed dribble if the slope is allowed to eat the bounce.
                 const hot = _normal.y > 0.995 ? THREE.MathUtils.clamp(
                     (-into - CS2.nadeHotSpeedStart) / (CS2.nadeHotSpeedEnd - CS2.nadeHotSpeedStart), 0, 1) : 0;
-                const eT = THREE.MathUtils.lerp(tuning.elasticity, CS2.nadeElasticityHot, hot);
-                const eN = THREE.MathUtils.lerp(tuning.elasticityVert, CS2.nadeElasticityHot, hot);
+                // Soft ground (dirt/sand) crushes the slide, not the rebound —
+                // see physicsConfig nadeElasticityHotSoft* (dust2 xbox ref).
+                const soft = hot > 0 && this.mapLoader.isSoftGround(pos.x, pos.z);
+                const eT = THREE.MathUtils.lerp(tuning.elasticity, soft ? CS2.nadeElasticityHotSoftT : CS2.nadeElasticityHot, hot);
+                const eN = THREE.MathUtils.lerp(tuning.elasticityVert, soft ? CS2.nadeElasticityHotSoftN : CS2.nadeElasticityHot, hot);
                 vel.copy(_bounceT).multiplyScalar(eT)
                     .addScaledVector(_normal, -into * eN);
                 // The rebound cap models Source's hot FLOOR impacts ("3 small
@@ -255,7 +258,8 @@ export class GrenadeSystem {
                 // demos keep it at the plain 0.45-0.49 (259 measured wall
                 // bounces). Capping it too crushed high wall-bounce lineups
                 // (csnades Left Arch: needs 282 u/s up off the wall).
-                if (_normal.y > 0.7 && vel.y > CS2.nadeBounceVyCap) vel.y = CS2.nadeBounceVyCap;
+                const vyCap = soft ? CS2.nadeBounceVyCapSoft : CS2.nadeBounceVyCap;
+                if (_normal.y > 0.7 && vel.y > vyCap) vel.y = vyCap;
 
                 const isFloor = _normal.y > 0.7;
                 const speed = vel.length();

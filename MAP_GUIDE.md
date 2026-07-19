@@ -22,11 +22,32 @@ cd tools
 GUI verzija (Windows) ili CLI (već u `tools/vrf/`):
 
 ```bash
-./tools/vrf/Source2Viewer-CLI -i de_mirage.vpk -e "maps/de_mirage/world.vmap_c" -o export -d
+./tools/vrf/Source2Viewer-CLI -i tools/cs2files/game/csgo/maps/de_dust2.vpk \
+  -f "maps/de_dust2.vmap_c" -o map-sources/de_dust2-export \
+  -d --gltf_export_format glb --gltf_export_materials --gltf_textures_adapt
 ```
 
-Rezultat: `de_<mapa>_d.glb` + gomila PNG tekstura u istom folderu (300-500MB).
+Rezultat: `maps/de_<mapa>.glb` + gomila PNG tekstura (300-500MB).
 Sirove exporte drži u `map-sources/` (gitignored, NE u `public/`!).
+
+ZAMKE (obje su pojele po sat vremena na dust2):
+
+- **`-f` je filepath filter, `-e` su EKSTENZIJE** — sa `-e "maps/..."` CLI tiho
+  ne exportuje ništa (exit 0, prazan output). Vmap je na
+  `maps/de_<mapa>.vmap_c` (root), ne `maps/de_<mapa>/world.vmap_c`.
+- **Teksture mapa NISU u map vpk-u** — žive u `pak01_NNN.vpk` chunkovima, i CLI
+  ih montira SAMO ako nađe `gameinfo.gi` (tools/cs2files/game/csgo/gameinfo.gi —
+  minimalni ručno pisani, mounta `Game csgo`). Bez njega export prođe "uspješno"
+  ali sa 0 tekstura i magenta materijalima. Koje chunkove skinuti: pokreni
+  export bez tekstura, pokupi `Failed to load "...vmat_c"` iz punog loga,
+  mapiraj na `fnumber` iz `pak01_dir.vpk --vpk_dir` listinga (+ vtex sa "color"
+  u imenu iz istih direktorija — optimizer ionako baca sve osim color mapa).
+  dust2+inferno unija: 191 chunkova ~20GB (`tools/filelist-textures.txt`).
+- **`world_physics.vmdl_c` se exportuje zasebno** (isti `-f` princip) pa pakuje
+  sa `tools/pack-collision.mjs` u `public/maps/<mapa>-collision.glb`.
+- **Spawnovi**: dump `maps/de_<mapa>/entities/default_ents.vents_c` (isti -f/-d),
+  parsiraj `info_player_*` sa `priority 0` + `enabled true`; app x = game Y,
+  app z = game X, yaw = game yaw.
 
 ## 3. Optimizuj za web
 

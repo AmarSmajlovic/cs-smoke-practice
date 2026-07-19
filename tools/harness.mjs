@@ -38,6 +38,8 @@ export async function buildHarness() {
     const scene = new THREE.Scene();
     const mapLoader = new MapLoader(scene);
     mapLoader.buildGameCollisionFromRoot(await parseGlb(join(ROOT, 'public/maps/mirage-collision.glb')));
+    // same soft-ground grid the app loads — keeps live and harness identical
+    mapLoader.softGround = JSON.parse(readFileSync(join(ROOT, 'public/maps/mirage-softground.json'), 'utf8'));
     const grenades = new GrenadeSystem(scene, mapLoader);
     const pairs = JSON.parse(readFileSync(join(ROOT, 'tools/mirage_pairs.json'), 'utf8'));
     return { grenades, pairs };

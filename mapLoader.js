@@ -21,6 +21,20 @@ THREE.Mesh.prototype.raycast = acceleratedRaycast;
 //  - physicsPath: real in-game collision mesh (VRF *_physics export) — used for
 //    the collider instead of the visual mesh when present
 //  - zUp: file has Z as the vertical axis
+// Hand-measured MIRAGE holes in the nade collider: invisible physics seals
+// that real CS2 grenades demonstrably pass (csnades "Left Arch from Back
+// Alley" + top-short references). Mirage-only calibration data — the app
+// passes them via MAPS.mirage, the headless harness gets them as defaults.
+export const MIRAGE_NADE_PASS_ZONES = [
+    { minX: 335, maxX: 565, minY: 195, maxY: 305, minZ: -1255, maxZ: -945 },
+    // the chimney-like block on the top-short walkway: its side faces reach
+    // below the corridor and swatted throws a hair right of the reference line
+    { minX: 385, maxX: 485, minY: 130, maxY: 305, minZ: -1195, maxZ: -1085 },
+    // the 30u stub on the touch-down tile that deflected arriving throws
+    // sideways (floor centroids sit below 118)
+    { minX: 312, maxX: 348, minY: 118, maxY: 148, minZ: -1232, maxZ: -1198 },
+];
+
 export const MAPS = {
     mirage: {
         name: 'de_mirage',
@@ -33,6 +47,9 @@ export const MAPS = {
         // Node names carry the game's collision groups: physics_group_*,
         // physics_csgo_grenadeclip, physics_npcclip_playerclip, physics_sky…
         collisionPath: '/maps/mirage-collision.glb',
+        softGroundPath: '/maps/mirage-softground.json',
+        nadePassZones: MIRAGE_NADE_PASS_ZONES,
+        nadeCeilingY: 650,
         // The REAL competitive spawn slots (priority-0 info_player_* entities
         // from de_mirage default_ents, extracted via Source2Viewer) so instant
         // smokes can be practiced from every spawn you can actually get in a
@@ -62,7 +79,56 @@ export const MAPS = {
         // down with the default framing get rotated 180 degrees
         radarRot180: ['CT'],
     },
-    dust2: { name: 'de_dust2', path: '/maps/dust2.glb', targetSize: 4300, zUp: false },
+    dust2: {
+        name: 'de_dust2',
+        path: '/maps/dust2.glb',
+        sizeMB: 72.5,
+        scale: VRF_SCALE,
+        zUp: false,
+        collisionPath: '/maps/dust2-collision.glb',
+        softGroundPath: '/maps/dust2-softground.json',
+        // ground weed/grass sprite cards export as opaque-looking brown
+        // crumple; in game they are barely-visible tufts — drop them
+        stripVisual: /dust_weeds|weeds_cressa|zebra_grass|sagebrush/i,
+        // The leaning wood pallet up to the B-halls platform: climbable in CS2
+        // (two hops), but the exported hull is a steep slab the player slides
+        // off. Flat cap on its top face (measured via live-dust2-jumptest).
+        // Two steps: near half (player side) low, far half (ledge side) high —
+        // the pallet leans diagonally, one full-footprint cap would hang over
+        // the player's head and block the jump instead of carrying it.
+        playerPatches: [
+            { min: [2356, -92, 76], max: [2374, -86, 96] },
+            { min: [2325, -72, 46], max: [2356, -66, 76] },
+        ],
+        // priority-0 info_player_* from de_dust2 default_ents (same extraction
+        // as mirage). App frame: x = game Y, z = game X; yaw = game yaw.
+        spawns: {
+            T: [
+                { x: -796, z: -822, yaw: 107 },
+                { x: -738, z: -858, yaw: 37 },
+                { x: -836, z: -761, yaw: 128 },
+                { x: -807, z: -697, yaw: 178 },
+                { x: -756, z: -657, yaw: 208 },
+                { x: -808, z: -1141, yaw: 112 },
+                { x: -754, z: -1181, yaw: 42 },
+                { x: -843, z: -1076, yaw: 133 },
+                { x: -808, z: -1015, yaw: 183 },
+                { x: -754, z: -980, yaw: 213 },
+                { x: -808, z: -493, yaw: 112 },
+                { x: -754, z: -533, yaw: 42 },
+                { x: -843, z: -428, yaw: 133 },
+                { x: -808, z: -367, yaw: 183 },
+                { x: -754, z: -332, yaw: 213 },
+            ],
+            CT: [
+                { x: 2439, z: 182, yaw: 356 },
+                { x: 2370, z: 160, yaw: 24 },
+                { x: 2481, z: 258, yaw: 292 },
+                { x: 2434, z: 334, yaw: 230 },
+                { x: 2353, z: 351, yaw: 202 },
+            ],
+        },
+    },
 };
 
 export class MapLoader {
@@ -100,6 +166,17 @@ export class MapLoader {
 
         this.fixSkinnedMeshes(visual);
         this.stripEffectMeshes(visual);
+        // Per-map cosmetic strip: exported detail clutter that reads as junk
+        // in-app (ground weed/grass sprite cards render like brown paper).
+        // Visual only — colliders come from the physics glb.
+        if (mapDef.stripVisual) {
+            const doomed = [];
+            visual.traverse((o) => {
+                if (o.isMesh && (mapDef.stripVisual.test(o.name) || mapDef.stripVisual.test(o.material?.name || ''))) doomed.push(o);
+            });
+            for (const m of doomed) m.parent.remove(m);
+            if (doomed.length) console.log(`Stripped ${doomed.length} map-specific clutter mesh(es)`);
+        }
         this.optimizeMaterials(visual);
 
         const mapRoot = new THREE.Group();
@@ -139,9 +216,16 @@ export class MapLoader {
         mapRoot.updateMatrixWorld(true);
 
         this.collectSpecialMeshes(visual);
+        // per-map soft-ground grid (dirt/sand cells for the bounce physics)
+        this.softGround = null;
+        if (mapDef.softGroundPath) {
+            try {
+                this.softGround = await (await fetch(mapDef.softGroundPath)).json();
+            } catch (e) { console.warn('softground grid failed to load:', e); }
+        }
         if (mapDef.collisionPath) {
             // the game's real collision hulls — used for BOTH player and nades
-            await this.buildGameCollision(mapDef.collisionPath);
+            await this.buildGameCollision(mapDef.collisionPath, mapDef.nadePassZones ?? [], mapDef.nadeCeilingY ?? Infinity, mapDef.playerPatches ?? null);
         } else {
             this.buildCollider(physicsRoot || visual);
         }
@@ -284,7 +368,18 @@ export class MapLoader {
                 });
                 optimalMat.name = mat.name || ''; // keep for collider filtering
                 const name = (mat.name || '').toLowerCase();
-                if (mat.map && (name.includes('foliage') || name.includes('tree') || name.includes('fence') || mat.transparent)) {
+                // Decals/overlays (stains, wear, signs, sprays) have SOFT alpha
+                // and sit co-planar with walls: alphaTest 0.5 erases them and
+                // plain blending z-fights. Real blend + polygon offset keeps
+                // them visible — they are the wall detail lineups aim at.
+                if (mat.map && /decal|overlay|spray|stain|wear|striping|signage|paint_patch|graffiti|poster/.test(name)) {
+                    optimalMat.transparent = true;
+                    optimalMat.alphaTest = 0.01;
+                    optimalMat.depthWrite = false;
+                    optimalMat.polygonOffset = true;
+                    optimalMat.polygonOffsetFactor = -2;
+                    optimalMat.polygonOffsetUnits = -2;
+                } else if (mat.map && (name.includes('foliage') || name.includes('tree') || name.includes('fence') || mat.transparent)) {
                     optimalMat.transparent = false;
                     optimalMat.alphaTest = 0.5;
                 }
@@ -292,11 +387,47 @@ export class MapLoader {
                 // not albedo tint — using it as color renders tarps/plants black
                 const shader = mat.userData?.vmat?.ShaderName || '';
                 if (mat.vertexColors && shader !== 'csgo_foliage.vfx') optimalMat.vertexColors = true;
+                // 2-way blend walls/floors: layer2 color rides in the emissive
+                // slot (packed by optimize-map.mjs) and _TEXCOORD_4 carries the
+                // per-vertex blend weight. Modulation mask, when packed, lives
+                // in layer2 alpha and shapes the reveal like the game shader;
+                // without it a smoothstep on the weight approximates the look.
+                if (mat.emissiveMap && mat.userData?.vmat?.TextureParams?.g_tLayer2Color) {
+                    const layer2 = mat.emissiveMap;
+                    optimalMat.onBeforeCompile = (sh) => {
+                        sh.uniforms.layer2Map = { value: layer2 };
+                        sh.vertexShader = sh.vertexShader
+                            .replace('#include <common>', '#include <common>\nattribute vec4 _texcoord_4;\nvarying float vLayerBlend;')
+                            .replace('#include <uv_vertex>', '#include <uv_vertex>\nvLayerBlend = _texcoord_4.x;');
+                        sh.fragmentShader = sh.fragmentShader
+                            .replace('#include <common>', '#include <common>\nuniform sampler2D layer2Map;\nvarying float vLayerBlend;')
+                            .replace('#include <map_fragment>', `#include <map_fragment>
+{
+    vec4 l2 = texture2D(layer2Map, vMapUv);
+    float w = clamp(vLayerBlend, 0.0, 1.0);
+    float t = (l2.a < 0.999)
+        ? clamp((w + l2.a - 1.0) / 0.25, 0.0, 1.0)
+        : smoothstep(0.05, 0.6, w);
+    diffuseColor.rgb = mix(diffuseColor.rgb, l2.rgb, t);
+}`);
+                    };
+                    optimalMat.customProgramCacheKey = () => 'cs2blend';
+                }
                 return optimalMat;
             });
             child.material = Array.isArray(child.material) ? newMaterials : newMaterials[0];
         });
         console.log(`Materials optimized on ${meshCount} meshes`);
+    }
+
+    // Is this point over a dirt/sand floor cell? (per-map grid baked by
+    // tools/build-softground.mjs; shared verbatim with the headless harness)
+    isSoftGround(x, z) {
+        const sg = this.softGround;
+        if (!sg) return false;
+        const ix = Math.floor((x - sg.minX) / sg.cell);
+        const iz = Math.floor((z - sg.minZ) / sg.cell);
+        return sg.rows[iz]?.[ix] === '1';
     }
 
     // Merge the given subtree into one static geometry and build a BVH over it.
@@ -394,14 +525,18 @@ export class MapLoader {
     //   - physics_npcclip_playerclip          : players only
     //   - physics_ladder_*                    : neither (ladder zones handle it)
     //   - physics_group_glass                 : players only (nades smash through)
-    async buildGameCollision(path) {
+    async buildGameCollision(path, nadePassZones, nadeCeilingY, playerPatches) {
         const gltf = await this.loader.loadAsync(path);
-        this.buildGameCollisionFromRoot(gltf.scene);
+        this.buildGameCollisionFromRoot(gltf.scene, nadePassZones, nadeCeilingY, playerPatches);
     }
 
     // Split out from buildGameCollision so the headless physics tests can feed
     // in a GLB parsed off disk and exercise the exact collision the game uses.
-    buildGameCollisionFromRoot(root) {
+    // Defaults are the MIRAGE calibration values so the harness (which loads
+    // mirage without a mapDef) keeps its demo-fitted behavior; the app passes
+    // per-map values — the zones are hand-measured mirage holes and must NEVER
+    // leak onto other maps.
+    buildGameCollisionFromRoot(root, nadePassZones = MIRAGE_NADE_PASS_ZONES, nadeCeilingY = 650, playerPatches = null) {
         const t0 = performance.now();
         root.updateMatrixWorld(true);
 
@@ -441,16 +576,7 @@ export class MapLoader {
                 // grenades demonstrably pass (csnades "Left Arch from Back
                 // Alley": the nade flies over the arch wall and drops straight
                 // through the plank canopy onto top short). NADE collider only.
-                const NADE_PASS_ZONES = [
-                    { minX: 335, maxX: 565, minY: 195, maxY: 305, minZ: -1255, maxZ: -945 },
-                    // the chimney-like block on the top-short walkway: its side
-                    // faces reach below the corridor and swatted throws that
-                    // arrive a hair right of the reference line
-                    { minX: 385, maxX: 485, minY: 130, maxY: 305, minZ: -1195, maxZ: -1085 },
-                    // the 30u stub on the touch-down tile that deflected
-                    // arriving throws sideways (floor centroids sit below 118)
-                    { minX: 312, maxX: 348, minY: 118, maxY: 148, minZ: -1232, maxZ: -1198 },
-                ];
+                const NADE_PASS_ZONES = nadePassZones;
                 // same story for the invisible "world top" faces (~y 700)
                 // hiding inside regular world groups — real smokes cross that
                 // height band freely, so drop those faces from the collider
@@ -460,14 +586,14 @@ export class MapLoader {
                     x >= b.minX && x <= b.maxX && y >= b.minY && y <= b.maxY && z >= b.minZ && z <= b.maxZ);
                 let needsFilter = false;
                 for (let i = 0; i < pos2.count * 3; i += 3) {
-                    if (pos2.array[i + 1] > 650 || inZone(pos2.array[i], pos2.array[i + 1], pos2.array[i + 2])) { needsFilter = true; break; }
+                    if (pos2.array[i + 1] > nadeCeilingY || inZone(pos2.array[i], pos2.array[i + 1], pos2.array[i + 2])) { needsFilter = true; break; }
                 }
                 if (needsFilter) {
                     const kept = [];
                     for (let f = 0; f < pos2.count; f += 3) {
                         const a = pos2.array, o = f * 3;
                         const y0 = a[o + 1], y1 = a[o + 4], y2 = a[o + 7];
-                        if (y0 > 650 && y1 > 650 && y2 > 650) continue; // ceiling face
+                        if (y0 > nadeCeilingY && y1 > nadeCeilingY && y2 > nadeCeilingY) continue; // ceiling face
                         // centroid rule: collision hulls use huge triangles, so
                         // requiring every vertex inside a zone lets slabs that
                         // merely CROSS it survive (the sloped hull over the
@@ -488,6 +614,21 @@ export class MapLoader {
             }
         });
         this.nadeGroups = nadeGroups;
+
+        // Hand-measured standable caps (world-space boxes, PLAYER only): spots
+        // that are climbable in CS2 but whose exported hull is a steep slab
+        // the player slides off (e.g. the leaning dust2 pallet). Grenades keep
+        // bouncing off the real hull, matching the game.
+        if (playerPatches) {
+            for (const p of playerPatches) {
+                const g = new THREE.BoxGeometry(
+                    p.max[0] - p.min[0], p.max[1] - p.min[1], p.max[2] - p.min[2]).toNonIndexed();
+                g.translate((p.min[0] + p.max[0]) / 2, (p.min[1] + p.max[1]) / 2, (p.min[2] + p.max[2]) / 2);
+                const stripped = new THREE.BufferGeometry();
+                stripped.setAttribute('position', g.attributes.position.clone());
+                playerGeos.push(stripped);
+            }
+        }
 
         const buildMesh = (geos) => {
             const merged = mergeGeometries(geos, false);

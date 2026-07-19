@@ -84,12 +84,32 @@ if (isPhysics || isCollision) {
     await doc.transform(quantize());
 } else {
     // visual mesh: keep only base color textures (renderer uses Lambert anyway)
+    //
+    // EXCEPTION — 2-way blend materials (F_FANCY_BLENDING, walls/floors with a
+    // damaged/patchy second layer, the detail lineups aim at): the layer2
+    // color texture is smuggled in the EMISSIVE slot (harmless for plain
+    // Lambert since emissive stays black) and the app's shader mixes it in by
+    // the _TEXCOORD_4 vertex blend weight. Layer2 PNGs must sit next to the
+    // input glb (VRF skips them; export from pak01 by vtex path when missing).
+    const path = await import('node:path');
+    const srcDir = path.dirname(input);
+    let blendPacked = 0;
     for (const mat of root.listMaterials()) {
+        const layer2 = mat.getExtras()?.vmat?.TextureParams?.g_tLayer2Color;
         mat.setNormalTexture(null);
         mat.setOcclusionTexture(null);
         mat.setMetallicRoughnessTexture(null);
         mat.setEmissiveTexture(null);
+        if (!layer2 || !mat.getBaseColorTexture()) continue;
+        const png = path.join(srcDir, layer2.split('/').pop().replace(/\.vtex$/, '.png'));
+        if (!fs.existsSync(png)) { console.warn(`layer2 missing on disk: ${png}`); continue; }
+        const tex = doc.createTexture(path.basename(png))
+            .setImage(fs.readFileSync(png))
+            .setMimeType('image/png');
+        mat.setEmissiveTexture(tex);
+        blendPacked++;
     }
+    if (blendPacked) console.log(`packed layer2 blend textures into ${blendPacked} materials`);
     await doc.transform(prune(), dedup());
     stat('after texture strip');
 

@@ -62,6 +62,18 @@ export const CS2 = {
     nadeElasticityHot: 0.29,
     nadeHotSpeedStart: 450,     // full 0.45 below this normal impact speed
     nadeHotSpeedEnd: 550,       // full 0.29 above this
+    // SOFT floors (dirt/sand/grass surface groups) crush differently than the
+    // stone the 0.29 was measured on: the csnades dust2 "XBox from T Spawn
+    // Corner" reference (jump+LMB, vzIn ~688 into the mid dirt) demonstrably
+    // rebounds ONTO the 90u xbox — that needs ~0.35 normal keep with LESS
+    // slide (~0.28), and a cap above 241 (230 clips the hop 8u under the lid).
+    // Physically sensible for granular ground: it eats slide, not rebound.
+    // Soft cells come from the per-map softground grid (tools/
+    // build-softground.mjs classifies the floor by visual material; collision
+    // group names are unreliable on dust2 — one node spans half the map).
+    nadeElasticityHotSoftN: 0.35,
+    nadeElasticityHotSoftT: 0.28,
+    nadeBounceVyCapSoft: 245,
     // Inherited player velocity: uniform 1.25 (Valve's constant). Confirmed
     // two independent ways on the demo launch velocities: 98 moving ground
     // throws pin the horizontal at 1.25 (12 u/s median, sharp minimum), and
