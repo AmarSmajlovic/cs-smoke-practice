@@ -1,1 +1,2 @@
-regex:game/csgo/maps/de_mirage\.vpk
+regex:game/csgo/maps/de_dust2\.vpk
+regex:game/csgo/maps/de_inferno\.vpk

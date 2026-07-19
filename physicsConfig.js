@@ -10,11 +10,9 @@ export const VRF_SCALE = 1 / 0.0254;
 // thrown projectile so they don't drift apart.
 export const GRENADE_ENV_INTENSITY = 2.5;
 
-// CS2-extracted binaries (maps, viewmodel, grenade) live outside this repo,
-// in the smokepractice-assets repo — served free with CORS via jsDelivr.
-export const ASSET_BASE = 'https://cdn.jsdelivr.net/gh/AmarSmajlovic/smokepractice-assets@master';
-// jsDelivr caps files at 20MB, so the big map geometry comes from raw instead
-export const ASSET_BASE_BIG = 'https://raw.githubusercontent.com/AmarSmajlovic/smokepractice-assets/master';
+// CS2-extracted binaries (maps, viewmodel, grenade) are committed in
+// public/maps + public/models and served same-origin by Vercel — the old
+// public smokepractice-assets CDN repo went private with the source.
 
 export const CS2 = {
     TICK: 1 / 64,               // CS2 tick rate (sub-tick aside, physics is 64/s)
