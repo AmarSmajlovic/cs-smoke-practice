@@ -178,6 +178,18 @@
             padding: 4px 8px; border-radius: 20px;
             background: var(--accent); color: #191100;
         }
+        /* freshly released map: pulsing NEW tag on the top-left corner */
+        .badge-new {
+            position: absolute; top: 10px; left: 10px; z-index: 2;
+            font-size: 10px; font-weight: 800; letter-spacing: 1px;
+            padding: 4px 8px; border-radius: 20px;
+            background: #3ddc84; color: #00220f;
+            animation: newpulse 1.6s ease-in-out infinite;
+        }
+        @keyframes newpulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(61, 220, 132, .55); }
+            50% { transform: scale(1.07); box-shadow: 0 0 0 7px rgba(61, 220, 132, 0); }
+        }
         /* coming-soon maps: dimmed art (drop a thumb into the inline style when
            you have one; the gradient beneath is the fallback) + SOON across */
         .map-card.soon { cursor: default; }
@@ -639,6 +651,7 @@
                     <div class="name">de_mirage</div>
                 </div>
                 <div class="map-card playable" data-map="dust2">
+                    <span class="badge-new">NEW</span>
                     <span class="badge">PLAY NOW</span>
                     <div class="art" style="background-image:url('/thumbs/dust2.jpg'), linear-gradient(160deg, #3a414c 0%, #23272e 100%)"></div>
                     <div class="name">de_dust2</div>
