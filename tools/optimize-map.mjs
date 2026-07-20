@@ -45,14 +45,18 @@ const root = doc.getRoot();
 // Source 2 utility geometry that is invisible in-game but present in VRF
 // exports — covers real surfaces with untextured meshes and bloats the file
 const UTILITY_RE = /blocklight|shadowmesh|occluder|toolsinvisible|toolsnodraw|toolsskybox|lightprobe/i;
+// Optional --dropnodes <regex>: cut background/skybox scenery and ugly foliage
+// cards that read badly flat-shaded (you can't reach them; they only add weight
+// and visual noise). Matched against node AND mesh name.
+const dropArg = args.indexOf('--dropnodes') >= 0 ? new RegExp(args[args.indexOf('--dropnodes') + 1], 'i') : null;
 let utilRemoved = 0;
 for (const node of root.listNodes()) {
-    if (UTILITY_RE.test(node.getName())) { node.dispose(); utilRemoved++; }
+    if (UTILITY_RE.test(node.getName()) || (dropArg && dropArg.test(node.getName()))) { node.dispose(); utilRemoved++; }
 }
 for (const mesh of root.listMeshes()) {
-    if (UTILITY_RE.test(mesh.getName())) { mesh.dispose(); utilRemoved++; }
+    if (UTILITY_RE.test(mesh.getName()) || (dropArg && dropArg.test(mesh.getName()))) { mesh.dispose(); utilRemoved++; }
 }
-if (utilRemoved) console.log(`removed ${utilRemoved} utility (blocklight/shadowmesh/...) nodes`);
+if (utilRemoved) console.log(`removed ${utilRemoved} utility/dropped nodes`);
 
 const stat = (label) => {
     let tris = 0;
@@ -120,7 +124,10 @@ if (isPhysics || isCollision) {
     if (ratio < 1) {
         await doc.transform(
             weld(),
-            simplify({ simplifier: MeshoptSimplifier, ratio, error: 0.001 }),
+            // lockBorder keeps mesh-boundary edges pinned so simplification
+            // can't tear holes where separate meshes meet (dense maps like
+            // inferno lose walls/floors to open seams without it).
+            simplify({ simplifier: MeshoptSimplifier, ratio, error: 0.001, lockBorder: true }),
         );
         stat('after simplify');
     }

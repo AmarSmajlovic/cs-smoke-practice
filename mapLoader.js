@@ -129,6 +129,37 @@ export const MAPS = {
             ],
         },
     },
+    inferno: {
+        name: 'de_inferno',
+        path: '/maps/inferno.glb?v=3',
+        sizeMB: 89,
+        scale: VRF_SCALE,
+        zUp: false,
+        collisionPath: '/maps/inferno-collision.glb?v=3',
+        softGroundPath: '/maps/inferno-softground.json?v=3',
+        // Dark window-glass materials flat-render as ugly black squares; swap
+        // them for a pale flat glass tint (see optimizeMaterials lightenWindows)
+        // so windows read as lit panes instead of holes.
+        lightenWindows: /italy_windows_glass|window_opaque|glass_stained_inferno|inferno_glass_01|apartment_windows_01_glass/i,
+        // priority-0 info_player_* from de_inferno default_ents.
+        spawns: {
+            T: [
+                { x: 441, z: -1587, yaw: 337 },
+                { x: 431, z: -1520, yaw: 267 },
+                { x: 420, z: -1657, yaw: 358 },
+                { x: 352, z: -1676, yaw: 48 },
+                { x: 289, z: -1662, yaw: 78 },
+            ],
+            CT: [
+                { x: 2090, z: 2493, yaw: 224 },
+                { x: 2153, z: 2457, yaw: 252 },
+                { x: 2006, z: 2472, yaw: 160 },
+                { x: 1977, z: 2353, yaw: 98 },
+                { x: 2028, z: 2292, yaw: 70 },
+                { x: 2079, z: 2397, yaw: 135 },
+            ],
+        },
+    },
 };
 
 export class MapLoader {
@@ -177,7 +208,7 @@ export class MapLoader {
             for (const m of doomed) m.parent.remove(m);
             if (doomed.length) console.log(`Stripped ${doomed.length} map-specific clutter mesh(es)`);
         }
-        this.optimizeMaterials(visual);
+        this.optimizeMaterials(visual, mapDef);
 
         const mapRoot = new THREE.Group();
         mapRoot.name = 'mapRoot';
@@ -347,7 +378,7 @@ export class MapLoader {
     }
 
     // Swap PBR materials for cheap Lambert ones
-    optimizeMaterials(rootObj) {
+    optimizeMaterials(rootObj, mapDef = {}) {
         let meshCount = 0;
         rootObj.traverse((child) => {
             if (!child.isMesh) return;
@@ -368,6 +399,16 @@ export class MapLoader {
                 });
                 optimalMat.name = mat.name || ''; // keep for collider filtering
                 const name = (mat.name || '').toLowerCase();
+                // Dark window glass: CS2 shows reflections/interior through these
+                // panes, but flat-shaded the dark texture renders as ugly black
+                // squares. Replace with a flat pale glass tint (drop the texture)
+                // so windows read as lit panes, closer to the in-game look.
+                if (mapDef.lightenWindows && mapDef.lightenWindows.test(mat.name || '')) {
+                    optimalMat.map = null;
+                    optimalMat.color = new THREE.Color(0x9fb0bd); // pale blue-grey glass
+                    optimalMat.transparent = false;
+                    return optimalMat;
+                }
                 // Decals/overlays (stains, wear, signs, sprays) have SOFT alpha
                 // and sit co-planar with walls: alphaTest 0.5 erases them and
                 // plain blending z-fights. Real blend + polygon offset keeps
