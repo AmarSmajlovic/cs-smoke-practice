@@ -99,6 +99,27 @@
         .beta-line .warn { color: var(--accent); font-weight: 800; }
         .beta-line a { color: var(--text); font-weight: 700; }
 
+        /* ---------- discord join CTA ---------- */
+        .discord-cta {
+            display: inline-flex; align-items: center; gap: 11px;
+            margin-top: 18px; padding: 12px 22px; border-radius: 12px;
+            background: #5865F2; color: #fff; text-decoration: none;
+            box-shadow: 0 8px 24px rgba(88,101,242,.35);
+            transition: transform .15s, background .15s, box-shadow .15s;
+        }
+        .discord-cta:hover {
+            transform: translateY(-2px); background: #4752c4;
+            box-shadow: 0 12px 30px rgba(88,101,242,.45);
+        }
+        .discord-cta svg { width: 24px; height: 24px; fill: currentColor; flex: 0 0 auto; }
+        .discord-cta .dc-txt { display: flex; flex-direction: column; text-align: left; line-height: 1.25; }
+        .discord-cta .dc-title { font-weight: 800; font-size: 14px; letter-spacing: .6px; }
+        .discord-cta .dc-sub { font-weight: 600; font-size: 11px; opacity: .82; letter-spacing: .2px; }
+        /* compact variant for the pause menu */
+        .discord-cta.sm { margin-top: 20px; padding: 9px 18px; gap: 9px; box-shadow: none; }
+        .discord-cta.sm svg { width: 18px; height: 18px; }
+        .discord-cta.sm .dc-title { font-size: 12.5px; }
+
         /* staggered entrance */
         .land-inner > * { animation: rise .55s cubic-bezier(.2, .7, .3, 1) both; }
         .land-inner > *:nth-child(1) { animation-delay: .05s; }
@@ -178,6 +199,12 @@
             padding: 4px 8px; border-radius: 20px;
             background: var(--accent); color: #191100;
         }
+        /* neutral tag for maps whose physics is still being calibrated — reads
+           as "playable, expectations set" instead of the gold "go" of PLAY NOW */
+        .badge.beta {
+            background: rgba(24, 28, 35, .92); color: #dce0e5;
+            border: 1px solid rgba(255, 255, 255, .24);
+        }
         /* freshly released map: pulsing NEW tag on the top-left corner */
         .badge-new {
             position: absolute; top: 10px; left: 10px; z-index: 2;
@@ -244,16 +271,41 @@
             text-shadow: 0 1px 6px rgba(0,0,0,.8);
         }
 
-        /* ---------- resume ---------- */
-        #resume { background: rgba(10, 12, 15, .82); overflow-y: auto; }
-        /* phones (esp. landscape): the menu is taller than the screen — stack
-           from the top and scroll instead of flex-centering content off both
-           edges, and keep the spawn radar small enough to leave room */
-        body.mobile #resume { justify-content: flex-start; padding: 18px 12px 28px; }
+        /* ---------- resume (pause menu) ---------- */
+        /* NEVER flex-center the overlay itself: when the menu is taller than the
+           viewport, justify-content:center pushes the top (the RESUME buttons)
+           ABOVE the screen where scroll can't reach it. Instead we scroll from
+           the top and let the inner panel's auto margins do the centering. */
+        #resume {
+            background: rgba(8, 10, 13, .86);
+            -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+            overflow-y: auto; -webkit-overflow-scrolling: touch;
+            justify-content: flex-start; padding: 32px 16px 44px;
+        }
+        /* auto margins center the panel when it fits and collapse to 0 when it
+           doesn't — so the top is always reachable by scroll, never clipped */
+        .resume-inner {
+            width: min(560px, 94vw); margin: auto 0;
+            display: flex; flex-direction: column; align-items: center;
+            background: rgba(20, 24, 30, .62); border: 1px solid #2b313b;
+            border-radius: 18px; padding: 26px 26px 30px;
+            box-shadow: 0 24px 70px rgba(0, 0, 0, .5);
+        }
+        /* one aligned column: every section fills the panel width */
+        .resume-inner .sens-row,
+        .resume-inner #pos-tools,
+        .resume-inner #spawn-tools,
+        .resume-inner #lu-wrap,
+        .resume-inner .fc-hint,
+        .resume-inner .keys-hint { width: 100%; max-width: 100%; }
+        #resume .btns {
+            display: flex; gap: 10px; margin-top: 6px;
+            flex-wrap: wrap; justify-content: center;
+        }
+        body.mobile #resume { padding: 14px 10px 24px; }
         body.mobile #resume h2 { font-size: 18px; }
+        body.mobile .resume-inner { padding: 20px 16px 24px; border-radius: 14px; }
         body.mobile #spawn-tools { width: min(260px, 70vw); }
-        body.mobile #pos-tools, body.mobile #lu-wrap { width: min(520px, 94vw); }
-        #resume .btns { display: flex; gap: 12px; margin-top: 22px; }
         /* CS2-scale sensitivity (deg per count = sens x 0.022) */
         .sens-row {
             display: flex; align-items: center; gap: 12px;
@@ -651,13 +703,13 @@
                     <div class="name">de_mirage</div>
                 </div>
                 <div class="map-card playable" data-map="dust2">
-                    <span class="badge">PLAY NOW</span>
+                    <span class="badge beta">BETA</span>
                     <div class="art" style="background-image:url('/thumbs/dust2.jpg'), linear-gradient(160deg, #3a414c 0%, #23272e 100%)"></div>
                     <div class="name">de_dust2</div>
                 </div>
                 <div class="map-card playable" data-map="inferno">
                     <span class="badge-new">NEW</span>
-                    <span class="badge">PLAY NOW</span>
+                    <span class="badge beta">BETA</span>
                     <div class="art" style="background-image:url('/thumbs/inferno.jpg'), linear-gradient(160deg, #3a414c 0%, #23272e 100%)"></div>
                     <div class="name">de_inferno</div>
                 </div>
@@ -674,8 +726,17 @@
 
             <div class="beta-line">
                 <span class="warn">⚠ BETA</span> — physics can be slightly off in places while it's polished.
-                <a href="mailto:amarsmajlovic27@gmail.com?subject=SMOKEPRACTICE%20issue%20%2F%20feedback">📧 Report a bug / feedback</a>
+                Found a lineup that lands wrong? Tell us on Discord and we'll fix it.
+                <a href="mailto:amarsmajlovic27@gmail.com?subject=SMOKEPRACTICE%20issue%20%2F%20feedback">📧 Or email us</a>
             </div>
+
+            <a class="discord-cta" href="https://discord.gg/72ZmmhGQf" target="_blank" rel="noopener">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.317 4.369a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.211.375-.444.865-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.291.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.009c.12.099.246.198.373.292a.077.077 0 0 1-.006.127 12.3 12.3 0 0 1-1.873.891.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+                <span class="dc-txt">
+                    <span class="dc-title">Join the Discord</span>
+                    <span class="dc-sub">Share lineups, report bugs, shape the maps</span>
+                </span>
+            </a>
 
             <div class="foot">
                 SMOKEPRACTICE.COM &nbsp;•&nbsp; <a href="mailto:amarsmajlovic27@gmail.com?subject=SMOKEPRACTICE%20feedback">💬 SEND FEEDBACK</a><br>
@@ -703,6 +764,7 @@
 
     <!-- RESUME / PAUSE -->
     <div id="resume" class="overlay hidden">
+      <div class="resume-inner">
         <h2>PAUSED</h2>
         <div class="btns">
             <button class="btn primary" id="btn-resume">RESUME</button>
@@ -767,6 +829,12 @@
             <b>THROW</b> full &nbsp; <b>MED</b> medium &nbsp; <b>LOB</b> short &nbsp; <b>JT</b> jumpthrow &nbsp; jump + click = manual jumpthrow<br>
             <b>CLEAR</b> smokes+trails &nbsp; <b>FLY</b> noclip &nbsp; <b>SPAWN ↻</b> cycle match spawns &nbsp; <b>↩ RETRY</b> back to last throw &nbsp; <b>📌 SAVE</b> lineup &nbsp; <b>☰</b> pause
         </div>
+
+        <a class="discord-cta sm" href="https://discord.gg/72ZmmhGQf" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.317 4.369a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.211.375-.444.865-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.291.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.009c.12.099.246.198.373.292a.077.077 0 0 1-.006.127 12.3 12.3 0 0 1-1.873.891.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+            <span class="dc-txt"><span class="dc-title">Join the Discord</span></span>
+        </a>
+      </div>
     </div>
 
     <!-- MOBILE CONTROLS -->
