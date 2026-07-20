@@ -249,7 +249,11 @@ function findSpawn() {
         spawnYawDeg = s.yaw ?? null;
     }
     if (s) {
-        const startY = Math.min(box.max.y + 10, 400);
+        // When the spawn entity height is known, start the ray just above it so
+        // roofs OVER the spawn don't get hit first (inferno spawns sit under
+        // apartment roofs). Otherwise drop from the map top (mirage/dust2 are
+        // open above their spawns).
+        const startY = s.y != null ? s.y + 40 : Math.min(box.max.y + 10, 400);
         const hit = mapLoader.raycastNade(new THREE.Vector3(s.x, startY, s.z), down, startY - box.min.y + 20);
         if (hit) {
             spawnPoint.set(s.x, hit.point.y + 2, s.z);

@@ -129,6 +129,47 @@ export const MAPS = {
             ],
         },
     },
+    inferno: {
+        name: 'de_inferno',
+        path: '/maps/inferno.glb?v=4',
+        sizeMB: 93,
+        scale: VRF_SCALE,
+        zUp: false,
+        collisionPath: '/maps/inferno-collision.glb?v=4',
+        softGroundPath: '/maps/inferno-softground.json?v=4',
+        lightenWindows: /_glass\b|glass_|_windows_|window_opaque|apartment_windows/i,
+        warmTint: 0xfff1e0, // subtle golden warmth toward the CS2 inferno tone
+        // Construction/clutter props that are in this vpk but NOT in live CS2
+        // inferno (user-verified in game): cones, barrier, wheelbarrow, trash
+        // bags, scaffolding, garbage bins, pallet. Strip so mid/arch match CS2.
+        stripVisual: /traffic_cone|trashbag|wheelbarrow|tuscan_scaffolding|garbage_?bin|italy_barricade|pallet_wood|streetbarrier|concrete_bag|_cement_|sandbag/i,
+        // Single door instance that closes the CT-side library entrance (open
+        // in live CS2); the door material is shared map-wide so it's removed by
+        // box, not by name. No collision here (verified).
+        stripBoxes: [
+            { min: [1548, 158, 2300], max: [1560, 275, 2376] },
+        ],
+        // spawns carry the entity height y (game z) — inferno spawns sit UNDER
+        // apartment roofs, so findSpawn must drop from just above y, not from
+        // the map top (which lands the player on a roof).
+        spawns: {
+            T: [
+                { x: 441, y: -46, z: -1587, yaw: 337 },
+                { x: 431, y: -46, z: -1520, yaw: 267 },
+                { x: 420, y: -46, z: -1657, yaw: 358 },
+                { x: 352, y: -46, z: -1676, yaw: 48 },
+                { x: 289, y: -46, z: -1662, yaw: 78 },
+            ],
+            CT: [
+                { x: 2090, y: 141, z: 2493, yaw: 224 },
+                { x: 2153, y: 141, z: 2457, yaw: 252 },
+                { x: 2006, y: 141, z: 2472, yaw: 160 },
+                { x: 1977, y: 141, z: 2353, yaw: 98 },
+                { x: 2028, y: 141, z: 2292, yaw: 70 },
+                { x: 2079, y: 155, z: 2397, yaw: 135 },
+            ],
+        },
+    },
 };
 
 export class MapLoader {
@@ -214,6 +255,36 @@ export class MapLoader {
             mapRoot.scale.setScalar(mapDef.targetSize / this.baseHorizontal);
         }
         mapRoot.updateMatrixWorld(true);
+
+        // stripBoxes run here (after scale) so world positions are in app HU —
+        // remove VISUAL faces inside world-space boxes: single prop instances
+        // sharing a map-wide material (e.g. one closed door CS2 doesn't have).
+        // Visual only; targets verified to have no collision.
+        if (mapDef.stripBoxes) {
+            const boxes = mapDef.stripBoxes.map((bx) =>
+                new THREE.Box3(new THREE.Vector3(...bx.min), new THREE.Vector3(...bx.max)));
+            let faces = 0;
+            const va = new THREE.Vector3(), vb = new THREE.Vector3(), vc = new THREE.Vector3(), ct = new THREE.Vector3();
+            visual.traverse((o) => {
+                if (!o.isMesh || !o.geometry.attributes.position) return;
+                const wb = new THREE.Box3().setFromBufferAttribute(o.geometry.attributes.position).applyMatrix4(o.matrixWorld);
+                if (!boxes.some((b) => b.intersectsBox(wb))) return;
+                const g = o.geometry, pos = g.attributes.position, idx = g.index, wm = o.matrixWorld;
+                const tri = idx ? idx.count / 3 : pos.count / 3;
+                const kept = [];
+                for (let f = 0; f < tri; f++) {
+                    const i0 = idx ? idx.getX(f * 3) : f * 3, i1 = idx ? idx.getX(f * 3 + 1) : f * 3 + 1, i2 = idx ? idx.getX(f * 3 + 2) : f * 3 + 2;
+                    va.fromBufferAttribute(pos, i0).applyMatrix4(wm);
+                    vb.fromBufferAttribute(pos, i1).applyMatrix4(wm);
+                    vc.fromBufferAttribute(pos, i2).applyMatrix4(wm);
+                    ct.addVectors(va, vb).add(vc).multiplyScalar(1 / 3);
+                    if (boxes.some((b) => b.containsPoint(ct))) { faces++; continue; }
+                    kept.push(i0, i1, i2);
+                }
+                if (idx) g.setIndex(kept);
+            });
+            if (faces) console.log(`Stripped ${faces} face(s) inside stripBoxes`);
+        }
 
         this.collectSpecialMeshes(visual);
         // per-map soft-ground grid (dirt/sand cells for the bounce physics)
@@ -358,9 +429,13 @@ export class MapLoader {
 
             const materials = Array.isArray(child.material) ? child.material : [child.material];
             const newMaterials = materials.map(mat => {
+                // Per-map warm tint: inferno's CS2 look comes from golden
+                // baked light we strip. A subtle warm multiply on the base
+                // colour nudges the flat render toward that tone.
+                const baseTint = mapDef.warmTint || 0xffffff;
                 const optimalMat = new THREE.MeshLambertMaterial({
                     map: mat.map || null,
-                    color: mat.map ? 0xffffff : (mat.color || new THREE.Color(0xcccccc)),
+                    color: mat.map ? baseTint : (mat.color || new THREE.Color(0xcccccc)),
                     transparent: mat.transparent || false,
                     opacity: mat.opacity !== undefined ? mat.opacity : 1.0,
                     alphaTest: mat.alphaTest || 0,
@@ -382,11 +457,16 @@ export class MapLoader {
                 // and sit co-planar with walls: alphaTest 0.5 erases them and
                 // plain blending z-fights. Real blend + polygon offset keeps
                 // them visible — they are the wall detail lineups aim at.
-                if (mat.map && /decal|overlay|spray|stain|wear|striping|signage|paint_patch|graffiti|poster|leakage|_dirt_|leak/.test(name)) {
-                    // Soft-alpha decals (dirt streaks, leakage, stains): NO
-                    // alphaTest — a threshold turns the soft gradient into a hard
-                    // smeared rectangle. Pure blend + polygon offset lets the
-                    // gradient fade smoothly onto the wall.
+                // ONLY genuine thin decals — NOT blend walls. Broad tokens like
+                // "overlay" / "_dirt_" catch solid blend-wall materials
+                // (old_plaster_blend_01_overlay, concrete_dirt_blend) and make
+                // them see-through. Match decal-specific names and the
+                // "overlay_ground/overlay_wall" DECAL prefixes, never the
+                // "_overlay" blend-variant SUFFIX.
+                if (mat.map && /decal|_spray|graffiti|poster|wall_stain|overlay_ground|overlay_wall|striping|signage|paint_patch|ghost_sign|bombsite_signs/.test(name)) {
+                    // Soft-alpha decals: NO alphaTest — a threshold turns the
+                    // soft gradient into a hard smeared rectangle. Pure blend +
+                    // polygon offset lets the gradient fade smoothly.
                     optimalMat.transparent = true;
                     optimalMat.alphaTest = 0;
                     optimalMat.depthWrite = false;
