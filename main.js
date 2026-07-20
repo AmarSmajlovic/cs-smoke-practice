@@ -232,7 +232,7 @@ function setupDpad() {
 }
 
 // ---------------------------------------------------------------- World
-const mapLoader = new MapLoader(scene);
+const mapLoader = new MapLoader(scene, renderer);
 const player = new Player();
 const grenades = new GrenadeSystem(scene, mapLoader);
 

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import {
     computeBoundsTree,
@@ -131,8 +132,8 @@ export const MAPS = {
     },
     inferno: {
         name: 'de_inferno',
-        path: '/maps/inferno.glb?v=4',
-        sizeMB: 93,
+        path: '/maps/inferno-ktx2.glb?v=5',
+        sizeMB: 100,
         scale: VRF_SCALE,
         zUp: false,
         collisionPath: '/maps/inferno-collision.glb?v=4',
@@ -173,10 +174,19 @@ export const MAPS = {
 };
 
 export class MapLoader {
-    constructor(scene) {
+    constructor(scene, renderer = null) {
         this.scene = scene;
         this.loader = new GLTFLoader();
         this.loader.setMeshoptDecoder(MeshoptDecoder);
+        // KTX2/Basis textures stay GPU-compressed (a fraction of the VRAM of
+        // decoded RGBA) — required so heavy maps like inferno fit mobile memory.
+        // detectSupport needs the renderer to pick a GPU-supported target format.
+        if (renderer) {
+            this.ktx2Loader = new KTX2Loader()
+                .setTranscoderPath('/basis/')
+                .detectSupport(renderer);
+            this.loader.setKTX2Loader(this.ktx2Loader);
+        }
         this.loadedMap = null;         // root group (visual + physics)
         this.visualRoot = null;        // visible geometry only
         this.collider = null;          // merged static mesh with a BVH, used by ALL physics
