@@ -129,37 +129,6 @@ export const MAPS = {
             ],
         },
     },
-    inferno: {
-        name: 'de_inferno',
-        path: '/maps/inferno.glb?v=4',
-        sizeMB: 93,
-        scale: VRF_SCALE,
-        zUp: false,
-        collisionPath: '/maps/inferno-collision.glb?v=4',
-        softGroundPath: '/maps/inferno-softground.json?v=4',
-        // Dark window-glass materials flat-render as ugly black squares; swap
-        // them for a pale flat glass tint (see optimizeMaterials lightenWindows)
-        // so windows read as lit panes instead of holes.
-        lightenWindows: /_glass\b|glass_|_windows_|window_opaque|apartment_windows/i,
-        // priority-0 info_player_* from de_inferno default_ents.
-        spawns: {
-            T: [
-                { x: 441, z: -1587, yaw: 337 },
-                { x: 431, z: -1520, yaw: 267 },
-                { x: 420, z: -1657, yaw: 358 },
-                { x: 352, z: -1676, yaw: 48 },
-                { x: 289, z: -1662, yaw: 78 },
-            ],
-            CT: [
-                { x: 2090, z: 2493, yaw: 224 },
-                { x: 2153, z: 2457, yaw: 252 },
-                { x: 2006, z: 2472, yaw: 160 },
-                { x: 1977, z: 2353, yaw: 98 },
-                { x: 2028, z: 2292, yaw: 70 },
-                { x: 2079, z: 2397, yaw: 135 },
-            ],
-        },
-    },
 };
 
 export class MapLoader {
