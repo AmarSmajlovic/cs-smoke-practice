@@ -131,16 +131,16 @@ export const MAPS = {
     },
     inferno: {
         name: 'de_inferno',
-        path: '/maps/inferno.glb?v=3',
-        sizeMB: 89,
+        path: '/maps/inferno.glb?v=4',
+        sizeMB: 93,
         scale: VRF_SCALE,
         zUp: false,
-        collisionPath: '/maps/inferno-collision.glb?v=3',
-        softGroundPath: '/maps/inferno-softground.json?v=3',
+        collisionPath: '/maps/inferno-collision.glb?v=4',
+        softGroundPath: '/maps/inferno-softground.json?v=4',
         // Dark window-glass materials flat-render as ugly black squares; swap
         // them for a pale flat glass tint (see optimizeMaterials lightenWindows)
         // so windows read as lit panes instead of holes.
-        lightenWindows: /italy_windows_glass|window_opaque|glass_stained_inferno|inferno_glass_01|apartment_windows_01_glass/i,
+        lightenWindows: /_glass\b|glass_|_windows_|window_opaque|apartment_windows/i,
         // priority-0 info_player_* from de_inferno default_ents.
         spawns: {
             T: [
@@ -413,9 +413,13 @@ export class MapLoader {
                 // and sit co-planar with walls: alphaTest 0.5 erases them and
                 // plain blending z-fights. Real blend + polygon offset keeps
                 // them visible — they are the wall detail lineups aim at.
-                if (mat.map && /decal|overlay|spray|stain|wear|striping|signage|paint_patch|graffiti|poster/.test(name)) {
+                if (mat.map && /decal|overlay|spray|stain|wear|striping|signage|paint_patch|graffiti|poster|leakage|_dirt_|leak/.test(name)) {
+                    // Soft-alpha decals (dirt streaks, leakage, stains): NO
+                    // alphaTest — a threshold turns the soft gradient into a hard
+                    // smeared rectangle. Pure blend + polygon offset lets the
+                    // gradient fade smoothly onto the wall.
                     optimalMat.transparent = true;
-                    optimalMat.alphaTest = 0.01;
+                    optimalMat.alphaTest = 0;
                     optimalMat.depthWrite = false;
                     optimalMat.polygonOffset = true;
                     optimalMat.polygonOffsetFactor = -2;
