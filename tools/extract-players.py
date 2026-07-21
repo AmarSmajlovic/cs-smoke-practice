@@ -11,8 +11,12 @@ from demoparser2 import DemoParser
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-for pf in sorted(glob.glob(os.path.join(ROOT, "tools/demo-data/*.pairs.json"))):
+for pf in sorted(glob.glob(os.path.join(ROOT, "tools/demo-data/**/*.pairs.json"), recursive=True)):
     base = os.path.basename(pf).replace(".pairs.json", "")
+    of = os.path.join(os.path.dirname(pf), base + ".players.json")
+    if os.path.exists(of) and os.path.getmtime(of) >= os.path.getmtime(pf):
+        print("skip (up to date):", base)
+        continue
     dem = os.path.join(ROOT, "public/demos", base + ".dem")
     if not os.path.exists(dem):
         print("SKIP (no demo):", base)
@@ -26,6 +30,5 @@ for pf in sorted(glob.glob(os.path.join(ROOT, "tools/demo-data/*.pairs.json"))):
          "X": float(r["X"]), "Y": float(r["Y"]), "Z": float(r["Z"])}
         for _, r in df.iterrows()
     ]
-    of = os.path.join(ROOT, "tools/demo-data", base + ".players.json")
     json.dump(out, open(of, "w"))
     print(base, "->", len(out), "player samples @", len(ticks), "ticks")
