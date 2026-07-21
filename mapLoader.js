@@ -101,6 +101,14 @@ export const MAPS = {
             { min: [2356, -92, 76], max: [2374, -86, 96] },
             { min: [2325, -72, 46], max: [2356, -66, 76] },
         ],
+        // The lower-tunnel "xbox": its exported hull is missing a solid top at
+        // the real height, so jumpthrow smokes that CS2 rests ON the box fall
+        // past it to the floor (~170u too low). 22 pro-demo detonations cluster
+        // dead flat at app height ~50 (tools/lineup-eval + dust2-xbox-realvs).
+        // Solid cap, top at 48 (+nadeRadius = 50 rest center).
+        nadePatches: [
+            { name: 'xbox', min: [1560, 36, -500], max: [1660, 48, -420] },
+        ],
         // priority-0 info_player_* from de_dust2 default_ents (same extraction
         // as mirage). App frame: x = game Y, z = game X; yaw = game yaw.
         spawns: {
@@ -306,7 +314,7 @@ export class MapLoader {
         }
         if (mapDef.collisionPath) {
             // the game's real collision hulls — used for BOTH player and nades
-            await this.buildGameCollision(mapDef.collisionPath, mapDef.nadePassZones ?? [], mapDef.nadeCeilingY ?? Infinity, mapDef.playerPatches ?? null);
+            await this.buildGameCollision(mapDef.collisionPath, mapDef.nadePassZones ?? [], mapDef.nadeCeilingY ?? Infinity, mapDef.playerPatches ?? null, mapDef.nadePatches ?? []);
         } else {
             this.buildCollider(physicsRoot || visual);
         }
@@ -629,9 +637,9 @@ export class MapLoader {
     //   - physics_npcclip_playerclip          : players only
     //   - physics_ladder_*                    : neither (ladder zones handle it)
     //   - physics_group_glass                 : players only (nades smash through)
-    async buildGameCollision(path, nadePassZones, nadeCeilingY, playerPatches) {
+    async buildGameCollision(path, nadePassZones, nadeCeilingY, playerPatches, nadePatches) {
         const gltf = await this.loader.loadAsync(path);
-        this.buildGameCollisionFromRoot(gltf.scene, nadePassZones, nadeCeilingY, playerPatches);
+        this.buildGameCollisionFromRoot(gltf.scene, nadePassZones, nadeCeilingY, playerPatches, nadePatches);
     }
 
     // Split out from buildGameCollision so the headless physics tests can feed
@@ -640,7 +648,7 @@ export class MapLoader {
     // mirage without a mapDef) keeps its demo-fitted behavior; the app passes
     // per-map values — the zones are hand-measured mirage holes and must NEVER
     // leak onto other maps.
-    buildGameCollisionFromRoot(root, nadePassZones = MIRAGE_NADE_PASS_ZONES, nadeCeilingY = 650, playerPatches = null) {
+    buildGameCollisionFromRoot(root, nadePassZones = MIRAGE_NADE_PASS_ZONES, nadeCeilingY = 650, playerPatches = null, nadePatches = []) {
         const t0 = performance.now();
         root.updateMatrixWorld(true);
 
@@ -717,6 +725,23 @@ export class MapLoader {
                 nadeFaces += g2.attributes.position.count / 3;
             }
         });
+        // Hand-measured solid caps for the NADE collider (world-space boxes):
+        // props whose exported hull is missing/mis-heighted so grenades fall
+        // where CS2 rests them on top. Each box's TOP face is the ground-truth
+        // rest height (measured from pro-demo detonations via tools/lineup-eval
+        // + dust2-xbox-realvs). Registered as its own nadeGroup so the
+        // faceIndex -> surfaceGroup lookup stays monotonic.
+        for (const p of nadePatches) {
+            const g = new THREE.BoxGeometry(
+                p.max[0] - p.min[0], p.max[1] - p.min[1], p.max[2] - p.min[2]).toNonIndexed();
+            g.translate((p.min[0] + p.max[0]) / 2, (p.min[1] + p.max[1]) / 2, (p.min[2] + p.max[2]) / 2);
+            const stripped = new THREE.BufferGeometry();
+            stripped.setAttribute('position', g.attributes.position.clone());
+            nadeGeos.push(stripped);
+            nadeGroups.push({ name: `nadepatch/${p.name || 'box'}`, faceStart: nadeFaces });
+            nadeFaces += stripped.attributes.position.count / 3;
+        }
+
         this.nadeGroups = nadeGroups;
 
         // Hand-measured standable caps (world-space boxes, PLAYER only): spots
