@@ -167,3 +167,24 @@ console.log(`\nworst ${WORST} (game coords — throw -> our rest vs real det):`)
 for (const r of kept.sort((a, b) => b.err - a.err).slice(0, WORST)) {
     console.log(`  err ${r.err.toFixed(0).padStart(5)}u  ${cat(r).padEnd(8)} setpos ${r.px.toFixed(0)} ${r.py.toFixed(0)} ${r.pz?.toFixed?.(0) ?? '?'}  yaw ${r.yaw.toFixed(0)} pitch ${r.pitch.toFixed(0)}  ourRest(${r.restGx.toFixed(0)}, ${r.restGy.toFixed(0)}, ${r.restH.toFixed(0)})  realDet(${r.dx.toFixed(0)}, ${r.dy.toFixed(0)}, ${r.dz.toFixed(0)})`);
 }
+
+// Cluster repeated lineups (same spot+aim thrown by several pros) — these are
+// real, systematic misses worth a geometry fix; one-off huge errors are noise.
+const clusters = new Map();
+for (const r of kept) {
+    if (r.err < 60) continue; // only cluster misses
+    const key = `${Math.round(r.px / 60)},${Math.round(r.py / 60)},${Math.round(r.yaw / 12)},${cat(r)}`;
+    (clusters.get(key) || clusters.set(key, []).get(key)).push(r);
+}
+const clusterList = [...clusters.values()].filter((c) => c.length >= 2)
+    .map((c) => {
+        const e = c.map((r) => r.err).sort((a, b) => a - b);
+        const med = e[e.length >> 1], r = c[0];
+        const avgDet = ['dx', 'dy', 'dz'].map((k) => c.reduce((a, x) => a + x[k], 0) / c.length);
+        const avgRest = ['restGx', 'restGy', 'restH'].map((k) => c.reduce((a, x) => a + x[k], 0) / c.length);
+        return { n: c.length, med, r, avgDet, avgRest };
+    }).sort((a, b) => b.med - a.med);
+console.log(`\nworst repeated clusters (n>=2 pros, err>=60u) — systematic, fixable:`);
+for (const c of clusterList.slice(0, 14)) {
+    console.log(`  n=${c.n} med ${c.med.toFixed(0).padStart(4)}u  ${cat(c.r).padEnd(8)} setpos~ ${c.r.px.toFixed(0)} ${c.r.py.toFixed(0)} ${c.r.pz?.toFixed?.(0) ?? '?'} yaw ${c.r.yaw.toFixed(0)} pitch ${c.r.pitch.toFixed(0)}  ourRest~(${c.avgRest.map((v) => v.toFixed(0)).join(', ')})  realDet~(${c.avgDet.map((v) => v.toFixed(0)).join(', ')})`);
+}

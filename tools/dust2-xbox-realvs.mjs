@@ -9,15 +9,16 @@ const OUT = process.env.OUT_DIR || '/private/tmp/claude-501/-Users-amarsmajlovic
 const URL = process.env.APP_URL || 'http://localhost:5173';
 const DIR = join(ROOT, 'tools/demo-data/dust2');
 
-// find the throw whose detonation is closest to app(1598,-462,50) i.e.
-// game det (x=-462, y=1598, z=50)
+// find the throw whose detonation is closest to a target game det. Default is
+// the xbox; override with TARGET="dx,dy,dz" (game coords).
+const [TX, TY, TZ] = (process.env.TARGET || '-462,1598,50').split(',').map(Number);
 let best = null;
 for (const pf of readdirSync(DIR).filter((f) => f.endsWith('.pairs.json'))) {
     const base = pf.replace('.pairs.json', '');
     const pairs = JSON.parse(readFileSync(join(DIR, pf), 'utf8'));
     const traj = JSON.parse(readFileSync(join(DIR, `${base}.traj.json`), 'utf8'));
     for (const p of pairs) {
-        const d = Math.hypot(p.dx - (-462), p.dy - 1598, p.dz - 50);
+        const d = Math.hypot(p.dx - TX, p.dy - TY, p.dz - TZ);
         if (!best || d < best.d) {
             // attach matching real samples (nearest throw_tick, same thrower)
             let bt = null;
@@ -42,7 +43,7 @@ await page.evaluate(() => window.__debug.startGame('dust2'));
 await page.waitForFunction(() => window.__debug?.mapLoader?.nadeCollider, { timeout: 300000 });
 await new Promise((r) => setTimeout(r, 1500));
 
-const out = await page.evaluate(({ p, samples }) => {
+const out = await page.evaluate(({ p, samples, W }) => {
     const { THREE, CS2, grenades } = window.__debug;
     const toApp = (x, y, z) => new THREE.Vector3(y, z, x);
     // reconstruct throw (jumpthrow-aware) — same as harness throwFrom
@@ -65,18 +66,18 @@ const out = await page.evaluate(({ p, samples }) => {
     const simApproach = [];
     while (grenades.stepProjectile(nade, CS2.TICK, false) && s < 64 * 12) {
         if (v.y > 0 && prevVy < 0) bounces.push(`bounce@ ${fmt(pos.x, pos.y, pos.z)} vy ${prevVy.toFixed(0)}->${v.y.toFixed(0)}`);
-        if (pos.x > 1300 && s % 3 === 0) simApproach.push(fmt(pos.x, pos.y, pos.z));
+        if (pos.x > W && s % 2 === 0) simApproach.push(fmt(pos.x, pos.y, pos.z));
         prevVy = v.y; s++;
     }
     const real = samples.map((sm) => toApp(sm.x, sm.y, sm.z));
-    const realApproach = real.filter((vv) => vv.x > 1300).filter((_, i) => i % 3 === 0).map((vv) => fmt(vv.x, vv.y, vv.z));
+    const realApproach = real.filter((vv) => vv.x > W).filter((_, i) => i % 2 === 0).map((vv) => fmt(vv.x, vv.y, vv.z));
     return {
         simRest: fmt(pos.x, pos.y, pos.z), simBounces: bounces.slice(-6),
-        simApproach: simApproach.slice(0, 14),
-        realApproach: realApproach.slice(0, 14),
+        simApproach: simApproach.slice(-16),
+        realApproach: realApproach.slice(-16),
         realRest: real.length ? fmt(real[real.length - 1].x, real[real.length - 1].y, real[real.length - 1].z) : 'n/a',
     };
-}, { p: best.p, samples: best.samples });
+}, { p: best.p, samples: best.samples, W: +(process.env.WIN || 1300) });
 await browser.close();
 console.log('\n--- REAL approach (x>1300) ---'); out.realApproach.forEach((r) => console.log('  ' + r));
 console.log('real rest:', out.realRest);
