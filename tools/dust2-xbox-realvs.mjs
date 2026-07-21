@@ -7,7 +7,8 @@ import { dirname, join } from 'node:path';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = process.env.OUT_DIR || '/private/tmp/claude-501/-Users-amarsmajlovic-Desktop-smoke-practice-threejs/cfadb422-6a01-4775-a0b2-e4d5a00842b3/scratchpad';
 const URL = process.env.APP_URL || 'http://localhost:5173';
-const DIR = join(ROOT, 'tools/demo-data/dust2');
+const MAP = process.env.MAP || 'dust2';
+const DIR = join(ROOT, 'tools/demo-data', MAP);
 
 // find the throw whose detonation is closest to a target game det. Default is
 // the xbox; override with TARGET="dx,dy,dz" (game coords).
@@ -39,7 +40,7 @@ const browser = await puppeteer.launch({
 const page = await browser.newPage();
 await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 120000 });
 await page.waitForFunction(() => !!window.__debug, { timeout: 120000 });
-await page.evaluate(() => window.__debug.startGame('dust2'));
+await page.evaluate((m) => window.__debug.startGame(m), MAP);
 await page.waitForFunction(() => window.__debug?.mapLoader?.nadeCollider, { timeout: 300000 });
 await new Promise((r) => setTimeout(r, 1500));
 
@@ -63,18 +64,19 @@ const out = await page.evaluate(({ p, samples, W }) => {
     const fmt = (x, y, z) => `app(x${x.toFixed(0)}, y${y.toFixed(0)}, z${z.toFixed(0)})`;
     let s = 0, prevVy = v.y;
     const bounces = [];
-    const simApproach = [];
+    const simFull = [];
     while (grenades.stepProjectile(nade, CS2.TICK, false) && s < 64 * 12) {
         if (v.y > 0 && prevVy < 0) bounces.push(`bounce@ ${fmt(pos.x, pos.y, pos.z)} vy ${prevVy.toFixed(0)}->${v.y.toFixed(0)}`);
-        if (pos.x > W && s % 2 === 0) simApproach.push(fmt(pos.x, pos.y, pos.z));
+        simFull.push({ x: pos.x, y: pos.y, z: pos.z });
         prevVy = v.y; s++;
     }
     const real = samples.map((sm) => toApp(sm.x, sm.y, sm.z));
-    const realApproach = real.filter((vv) => vv.x > W).filter((_, i) => i % 2 === 0).map((vv) => fmt(vv.x, vv.y, vv.z));
+    // evenly sample the full flight of both so divergence is visible
+    const even = (arr, n) => { const out = []; const step = Math.max(1, Math.floor(arr.length / n)); for (let i = 0; i < arr.length; i += step) out.push(arr[i]); return out; };
     return {
         simRest: fmt(pos.x, pos.y, pos.z), simBounces: bounces.slice(-6),
-        simApproach: simApproach.slice(-16),
-        realApproach: realApproach.slice(-16),
+        simApproach: even(simFull, 22).map((v) => fmt(v.x, v.y, v.z)),
+        realApproach: even(real, 22).map((v) => fmt(v.x, v.y, v.z)),
         realRest: real.length ? fmt(real[real.length - 1].x, real[real.length - 1].y, real[real.length - 1].z) : 'n/a',
     };
 }, { p: best.p, samples: best.samples, W: +(process.env.WIN || 1300) });
