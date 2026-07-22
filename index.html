@@ -463,17 +463,12 @@
             position: fixed; left: 10px; bottom: 8px; z-index: 10;
             font: 11px/1.4 monospace; color: rgba(255,255,255,.55); pointer-events: none;
         }
-        /* crosshair inside the corner scope: the same CS2 dot crosshair PLUS
-           the long full-frame lines, so it reads exactly like the main aim */
+        /* crosshair inside the corner scope: ONLY the long full-frame lines
+           (the same as the big charge crosshair) — no small dot crosshair */
         .pip-cross { display: none; position: absolute; inset: 0; pointer-events: none; z-index: 2; }
         #pip-frame.scope .pip-cross { display: block; }
         .pip-cross .pc-v { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; transform: translateX(-50%); background: rgba(43,252,43,.6); box-shadow: 0 0 0 1px rgba(0,0,0,.3); }
         .pip-cross .pc-h { position: absolute; top: 50%; left: 0; right: 0; height: 1px; transform: translateY(-50%); background: rgba(43,252,43,.6); box-shadow: 0 0 0 1px rgba(0,0,0,.3); }
-        .pip-cross i { position: absolute; background: #2bfc2b; box-shadow: 0 0 0 1px rgba(0,0,0,.55); }
-        .pip-cross i:nth-child(3) { width: 2px; height: 7px; left: calc(50% - 1px); top: calc(50% - 10px); } /* top */
-        .pip-cross i:nth-child(4) { width: 2px; height: 7px; left: calc(50% - 1px); top: calc(50% + 3px); }  /* bottom */
-        .pip-cross i:nth-child(5) { width: 7px; height: 2px; left: calc(50% - 10px); top: calc(50% - 1px); } /* left */
-        .pip-cross i:nth-child(6) { width: 7px; height: 2px; left: calc(50% + 3px); top: calc(50% - 1px); }  /* right */
         #hud-hint {
             position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 10;
             display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;
@@ -636,7 +631,7 @@
     </div>
     <div id="nade-crosshair"><i class="v"></i><i class="h"></i></div>
     <div id="pip-frame"><span class="tag">SMOKE CAM</span>
-        <div class="pip-cross"><span class="pc-v"></span><span class="pc-h"></span><i></i><i></i><i></i><i></i></div>
+        <div class="pip-cross"><span class="pc-v"></span><span class="pc-h"></span></div>
     </div>
     <div id="followcam-exit" class="hidden">✕ SMOKE CAM</div>
 
