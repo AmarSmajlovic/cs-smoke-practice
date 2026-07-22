@@ -43,9 +43,9 @@ scene.add(camera);
 // the vertical/horizontal FOV (73.74° / 106.26°) matches CS2 1:1.
 const VIEW_ASPECT = 16 / 9;
 const BASE_VFOV = 73.74; // CS2 vertical FOV at 16:9 (its 90° horizontal at 4:3)
-// Optical zoom for precise lineup aiming (scroll wheel). 1 = normal; higher
-// narrows the FOV. Look sensitivity scales down with it so aim stays fine.
-let viewZoom = 1;
+// Corner scope: the PiP square magnifies down the crosshair 5× WHILE a throw is
+// charged (button held), then shows the smoke falling after release.
+const SCOPE_ZOOM = 5;
 // The centred 16:9 rect the game renders into, in WebGL viewport coords (CSS px,
 // y from the BOTTOM). The renderer buffer stays full-window so PiP/scissor math
 // that uses window coords keeps working; only the main view is boxed.
@@ -63,18 +63,8 @@ function applyFov() {
     const oxLeft = Math.round((W - rw) / 2), oyTop = Math.round((H - rh) / 2);
     viewRect = { x: oxLeft, y: H - oyTop - rh, w: rw, h: rh };
     camera.aspect = VIEW_ASPECT;
-    camera.fov = viewZoom <= 1 ? BASE_VFOV
-        : THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(BASE_VFOV) / 2) / viewZoom));
+    camera.fov = BASE_VFOV; // main view is always the true CS2 16:9 FOV
     camera.updateProjectionMatrix();
-}
-// Scroll-wheel zoom: hold the aim on a distant lineup reference precisely, then
-// throw (which snaps back to 1x so you see the smoke fly + the smoke cam).
-function setZoom(z) {
-    viewZoom = THREE.MathUtils.clamp(z, 1, 5);
-    applyFov();
-    applySens();  // sensitivity divides by zoom → fine aim while zoomed
-    const el = $('zoom-ind');
-    if (el) { el.textContent = viewZoom > 1.02 ? `${viewZoom.toFixed(1)}×` : ''; }
 }
 // Clear the whole buffer black (the letterbox bars) then render `cam` into the
 // centred 16:9 rect, so the POV always matches CS2 at 16:9.
@@ -140,7 +130,7 @@ const SENS_DEFAULT = 2.5; // CS2's own default
 let sens = parseFloat(localStorage.getItem('sp-sens')) || SENS_DEFAULT;
 function applySens() {
     sens = THREE.MathUtils.clamp(sens, 0.05, 20);
-    controls.pointerSpeed = sens * 0.192 / viewZoom; // zoomed in → finer aim
+    controls.pointerSpeed = sens * 0.192;
     localStorage.setItem('sp-sens', String(sens));
     $('sens-range').value = Math.min(sens, 8);
     $('sens-num').value = String(+sens.toFixed(2));
@@ -398,7 +388,6 @@ function pauseGame() {
     gameState = 'paused';
     // drop any half-finished throw gesture so resuming can't fire a smoke
     leftHeld = rightHeld = gestureL = gestureR = false;
-    if (viewZoom > 1) setZoom(1); // reset zoom so the menu view is normal
     updateThrowHelp();
     showResume('PAUSED');
 }
@@ -697,12 +686,6 @@ document.addEventListener('keyup', (e) => {
     if (e.code === 'Space') keys.space = false;
 });
 
-// Scroll wheel = zoom the view (fine lineup aiming). Up zooms in, down out.
-renderer.domElement.addEventListener('wheel', (e) => {
-    if (gameState !== 'playing') return;
-    e.preventDefault();
-    setZoom(viewZoom * (e.deltaY < 0 ? 1.2 : 1 / 1.2));
-}, { passive: false });
 
 // Throw: LMB = full, RMB = underhand (lob), LMB+RMB = medium.
 // A "gesture" collects every button pressed until ALL are released, then
@@ -752,6 +735,7 @@ document.addEventListener('contextmenu', (e) => {
 // pass into the #pip-frame rect on top of the main render.
 const pipCam = new THREE.PerspectiveCamera(65, 16 / 9, 1, 30000);
 const pipFrame = $('pip-frame');
+const pipTag = pipFrame.querySelector('.tag');
 const pip = { nade: null, holdUntil: 0 };
 // FULLSCREEN: the main view chases the smoke after a throw (✕ to bail out).
 // WINDOW: a small corner window instead — the default everywhere.
@@ -789,7 +773,12 @@ function pipStop() {
 $('followcam-exit').addEventListener('click', pipStop);
 
 function updatePip(delta) {
-    if (!pip.nade) return;
+    if (!pip.nade) {
+        // aiming: the corner scope mirrors the main camera (magnified in renderPip)
+        pipCam.position.copy(camera.position);
+        pipCam.quaternion.copy(camera.quaternion);
+        return;
+    }
     const target = pip.nade.position; // the vector persists after detonation
     if (grenades.projectiles.includes(pip.nade)) {
         // chase point behind-above the flight direction…
@@ -815,10 +804,26 @@ function updatePip(delta) {
 }
 
 function renderPip() {
-    if (!pip.nade || gameState !== 'playing') return;
+    if (gameState !== 'playing') return;
+    // The corner square is always on: a zoom scope down the crosshair while
+    // aiming, then the smoke chase after a throw (window mode). In fullscreen
+    // smoke-cam mode the throw takes the main view, so only the aiming scope
+    // uses the corner.
+    // scope only while a throw is charged (button/finger held), like CS2's
+    // charge preview — then the smoke chase after release
+    const charging = hasSmoke && (leftHeld || rightHeld || touchHeldStrength !== null);
+    const scoping = !pip.nade && charging;
+    const following = pip.nade && !followCam;
+    if (!scoping && !following) { pipFrame.classList.remove('on'); return; }
+    pipFrame.classList.add('on');
+    pipFrame.classList.toggle('scope', scoping);
+    if (pipTag) pipTag.textContent = scoping ? 'ZOOM' : 'SMOKE CAM';
     const r = pipFrame.getBoundingClientRect();
     if (r.width < 8) return;
     pipCam.aspect = r.width / r.height;
+    pipCam.fov = scoping
+        ? THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(BASE_VFOV) / 2) / SCOPE_ZOOM))
+        : 65;
     pipCam.updateProjectionMatrix();
     // setViewport/setScissor take CSS pixels (three applies the pixel ratio);
     // WebGL's origin is bottom-left, the DOM's is top-left
@@ -863,7 +868,6 @@ function throwSmoke(strength, throwVel = player.velocity, eyeOverride = null) {
 
     const nade = grenades.throwGrenade(eyeOverride || player.getEyePosition(_eye), _fwdH, sourcePitchDeg, strength, throwVel);
     pipFollow(nade);
-    if (viewZoom > 1) setZoom(1); // snap back so you watch the smoke fly
 
     hasSmoke = false;
     // Underhand for the lob, overhand for everything else — the same split the
@@ -1631,7 +1635,7 @@ function animate() {
 animate();
 
 if (import.meta.env.DEV) {
-    window.__debug = { player, mapLoader, grenades, CS2, tuning, camera, THREE, startGame, solveAim, placeAimTarget, solveAimFromHere, lineupHelper, getposString, applySetposString, setZoom };
+    window.__debug = { player, mapLoader, grenades, CS2, tuning, camera, THREE, startGame, solveAim, placeAimTarget, solveAimFromHere, lineupHelper, getposString, applySetposString };
 }
 
 window.addEventListener('resize', () => {

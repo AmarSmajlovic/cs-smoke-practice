@@ -462,13 +462,12 @@
             position: fixed; left: 10px; bottom: 8px; z-index: 10;
             font: 11px/1.4 monospace; color: rgba(255,255,255,.55); pointer-events: none;
         }
-        /* zoom level, shown just under the crosshair while scrolled in */
-        #zoom-ind {
-            position: fixed; top: calc(50% + 26px); left: 50%; transform: translateX(-50%);
-            z-index: 10; pointer-events: none;
-            font: 800 13px/1 'Segoe UI', sans-serif; letter-spacing: 1px;
-            color: rgba(43,252,43,.9); text-shadow: 0 1px 3px rgba(0,0,0,.8);
-        }
+        /* crosshair inside the corner scope (marks where you're aiming) */
+        .pip-cross { display: none; position: absolute; top: 50%; left: 50%; width: 16px; height: 16px; transform: translate(-50%, -50%); pointer-events: none; z-index: 2; }
+        #pip-frame.scope .pip-cross { display: block; }
+        .pip-cross::before, .pip-cross::after { content: ''; position: absolute; background: #2bfc2b; box-shadow: 0 0 0 1px rgba(0,0,0,.55); }
+        .pip-cross::before { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); }
+        .pip-cross::after { top: 50%; left: 0; height: 2px; width: 100%; transform: translateY(-50%); }
         #hud-hint {
             position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 10;
             display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;
@@ -612,7 +611,6 @@
 
     <!-- HUD -->
     <div id="crosshair" class="hidden"><i></i><i></i><i></i><i></i></div>
-    <div id="zoom-ind"></div>
     <div id="pos-display" class="hidden"></div>
     <div id="hud-hint" class="hidden">
         <span class="kb"><kbd>F</kbd> jumpthrow</span>
@@ -631,7 +629,7 @@
         <span class="kb"><kbd>ESC</kbd> menu</span>
     </div>
     <div id="nade-crosshair"><i class="v"></i><i class="h"></i></div>
-    <div id="pip-frame"><span class="tag">SMOKE CAM</span></div>
+    <div id="pip-frame"><span class="tag">SMOKE CAM</span><i class="pip-cross"></i></div>
     <div id="followcam-exit" class="hidden">✕ SMOKE CAM</div>
 
     <!-- CONTROLS / HELP -->
@@ -658,7 +656,7 @@
             <div class="ctl-row"><span class="k">L</span><span>save your last throw as a lineup (list in the pause menu)</span></div>
             <div class="ctl-row"><span class="k">C</span><span>clear all smokes and trails</span></div>
             <div class="ctl-row"><span class="k">P</span><span>copy your position as a CS2 setpos — works in the game console too</span></div>
-            <div class="ctl-row"><span class="k">SCROLL</span><span>zoom the view in/out for fine lineup aiming — snaps back to 1× when you throw</span></div>
+            <div class="ctl-row"><span class="k">ZOOM SCOPE</span><span>hold a throw button and a corner scope magnifies 5× down your crosshair for fine aiming — then shows the smoke land</span></div>
             <div class="ctl-row"><span class="k">M</span><span>mark the spot you're aiming at as a target</span></div>
             <div class="ctl-row"><span class="k">N</span><span>auto-aim a throw at the target from where you stand (SHIFT = medium, ALT = lob)</span></div>
             <div class="ctl-row"><span class="k">SMOKE CAM</span><span>after every throw a cam follows the smoke — corner window or fullscreen chase (✕ to exit), pick in the pause menu</span></div>
