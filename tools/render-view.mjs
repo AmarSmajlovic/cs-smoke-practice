@@ -35,11 +35,12 @@ const info = await page.evaluate((SETPOS) => {
 await new Promise((r) => setTimeout(r, 600));
 // re-apply right before the shot: headless has no pointer lock so the player
 // can drift off the frozen spot in the idle loop
-await page.evaluate((SETPOS) => {
+await page.evaluate(({ SETPOS, FOV }) => {
     const { applySetposString, player, camera } = window.__debug;
     applySetposString(SETPOS);
     player.getEyePosition(camera.position);
-}, SETPOS);
+    if (FOV) { camera.fov = FOV; camera.updateProjectionMatrix(); }
+}, { SETPOS, FOV: +(process.env.FOV || 0) });
 await new Promise((r) => setTimeout(r, 120));
 await page.screenshot({ path: `${OUT}/view.png` });
 console.log('camera fov(vertical)', info.fov, 'aspect', info.aspect, 'worldDir', info.dir, `-> view.png (${W}x${H})`);

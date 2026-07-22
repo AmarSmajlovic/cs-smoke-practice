@@ -1590,6 +1590,8 @@ function animate() {
     }
 
     tickSetposHold();
+    const activeCam = (followCam && pip.nade) ? pipCam : camera;
+    if (map) mapLoader.updateBillboards(activeCam.position); // antennas/dishes face the view
     if (followCam && pip.nade) {
         // fullscreen smoke cam: the main view chases the nade (same 16:9 box)
         pipCam.aspect = VIEW_ASPECT;

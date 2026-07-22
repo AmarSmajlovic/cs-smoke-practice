@@ -203,6 +203,8 @@ export class MapLoader {
         this.baseHorizontal = null;
         this.ladderZones = [];         // Box3 volumes where the player can climb
         this.breakables = [];          // { mesh, box, broken } — glass the nade smashes through
+        this.billboards = [];          // sprite "card" meshes (antennas/dishes) that face the camera
+        this.billboardGroup = null;
     }
 
     async loadMap(mapDef, region = null, onProgress = null) {
@@ -305,6 +307,11 @@ export class MapLoader {
         }
 
         this.collectSpecialMeshes(visual);
+        // CS2 renders distant antennas/dishes as camera-facing "cards" (flat
+        // sprite quads). Baked into the GLB they sit at a fixed angle, so from
+        // the player they read as thin edge-on slivers ("not finely rendered").
+        // Split each card off and billboard it so it faces the player like CS2.
+        this._setupBillboards(visual);
         // per-map soft-ground grid (dirt/sand cells for the bounce physics)
         this.softGround = null;
         if (mapDef.softGroundPath) {
@@ -354,6 +361,12 @@ export class MapLoader {
             this.colliderVisualizer.material.dispose();
             this.colliderVisualizer = null;
         }
+        if (this.billboardGroup) {
+            this.scene.remove(this.billboardGroup);
+            this.billboardGroup.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
+            this.billboardGroup = null;
+        }
+        this.billboards = [];
         this.loadedMap = null;
         this.visualRoot = null;
         this.ladderZones = [];
@@ -612,6 +625,89 @@ export class MapLoader {
             `(${(merged.attributes.position.count / 3).toLocaleString()} tris)`);
     }
 
+    // Split every "_card_" sprite mesh (antennas, satellite dishes) into
+    // per-card billboards that face the player, so they don't read as thin
+    // edge-on slivers. Each card is a flat quad; we cluster its triangles by
+    // world position, rebuild them in a local frame (x = the card's own
+    // horizontal axis, y = up, z = facing normal, UVs preserved) and re-face
+    // them toward the camera every frame in updateBillboards().
+    _setupBillboards(visual) {
+        this.billboards = [];
+        if (this.billboardGroup) { this.scene.remove(this.billboardGroup); this.billboardGroup = null; }
+        const group = new THREE.Group();
+        const cards = [];
+        visual.traverse((o) => { if (o.isMesh && /_card_/i.test(o.name) && o.geometry?.attributes?.position) cards.push(o); });
+        for (const o of cards) {
+            const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry;
+            const pos = g.attributes.position, uv = g.attributes.uv, wm = o.matrixWorld;
+            const nTri = pos.count / 3;
+            const tris = [];
+            for (let t = 0; t < nTri; t++) {
+                const vs = [], uvs = [];
+                for (let k = 0; k < 3; k++) {
+                    const i = t * 3 + k;
+                    vs.push(new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(wm));
+                    uvs.push(uv ? new THREE.Vector2().fromBufferAttribute(uv, i) : new THREE.Vector2());
+                }
+                const c = new THREE.Vector3().addVectors(vs[0], vs[1]).add(vs[2]).multiplyScalar(1 / 3);
+                tris.push({ vs, uvs, c });
+            }
+            // cluster triangles into cards by centroid proximity
+            const used = new Array(tris.length).fill(false);
+            for (let t = 0; t < tris.length; t++) {
+                if (used[t]) continue;
+                const grp = [tris[t]]; used[t] = true;
+                for (let s = t + 1; s < tris.length; s++) {
+                    if (!used[s] && grp.some((x) => x.c.distanceTo(tris[s].c) < 200)) { grp.push(tris[s]); used[s] = true; }
+                }
+                this._makeBillboard(grp, o.material, group);
+            }
+            o.visible = false; // hide the baked, fixed-angle card
+        }
+        if (this.billboards.length) {
+            this.billboardGroup = group;
+            this.scene.add(group);
+            console.log(`Billboarded ${this.billboards.length} sprite card(s)`);
+        }
+    }
+
+    _makeBillboard(tris, material, group) {
+        const center = new THREE.Vector3(); let n = 0;
+        const flat = [];
+        for (const tr of tris) for (const v of tr.vs) { center.add(v); flat.push(v); n++; }
+        center.multiplyScalar(1 / n);
+        // the card's own horizontal axis = direction of largest horizontal spread
+        let hx = 1, hz = 0, maxd = 0;
+        for (let i = 0; i < flat.length; i++) for (let j = i + 1; j < flat.length; j++) {
+            const dx = flat[i].x - flat[j].x, dz = flat[i].z - flat[j].z, d = dx * dx + dz * dz;
+            if (d > maxd) { maxd = d; const l = Math.sqrt(d); hx = dx / l; hz = dz / l; }
+        }
+        const P = [], U = [], tmp = new THREE.Vector3();
+        for (const tr of tris) for (let k = 0; k < 3; k++) {
+            tmp.copy(tr.vs[k]).sub(center);
+            P.push(tmp.x * hx + tmp.z * hz, tmp.y, 0); // local: x along card axis, y up, z=0 (faces +z)
+            U.push(tr.uvs[k].x, tr.uvs[k].y);
+        }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+        geo.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2));
+        const mat = material.clone();
+        mat.side = THREE.DoubleSide; // face-agnostic so it shows however it turns
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.copy(center);
+        group.add(mesh);
+        this.billboards.push(mesh);
+    }
+
+    // Y-axis billboard: turn each card to face the camera horizontally, upright.
+    updateBillboards(camPos) {
+        if (!this.billboards.length) return;
+        for (const bb of this.billboards) {
+            _bbTgt.set(camPos.x, bb.position.y, camPos.z);
+            bb.lookAt(_bbTgt);
+        }
+    }
+
     // Change the target HU size of the loaded map and rebuild the collider
     // (only for maps without an exact scale)
     rescale(targetSize) {
@@ -860,5 +956,6 @@ export class MapLoader {
 }
 
 const _raycaster = new THREE.Raycaster();
+const _bbTgt = new THREE.Vector3();
 const _sweepA = new THREE.Vector3(), _sweepB = new THREE.Vector3(), _sweepO = new THREE.Vector3();
 const CS2_BREAK_MARGIN = 3;
