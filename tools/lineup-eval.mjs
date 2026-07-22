@@ -43,6 +43,7 @@ await page.waitForFunction(() => !!window.__debug, { timeout: 120000 });
 await page.evaluate((m) => window.__debug.startGame(m), MAP);
 await page.waitForFunction(() => window.__debug?.mapLoader?.nadeCollider, { timeout: 300000 });
 await new Promise((r) => setTimeout(r, 1500));
+if (process.env.HARD) await page.evaluate(() => { window.__debug.mapLoader.isSoftGround = () => false; });
 
 const results = await page.evaluate((groups) => {
     const { THREE, CS2, grenades } = window.__debug;
