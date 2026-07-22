@@ -20,8 +20,8 @@ await page.evaluate((m) => window.__debug.startGame(m), MAP);
 await page.waitForFunction(() => window.__debug?.mapLoader?.nadeCollider, { timeout: 300000 });
 await new Promise((r) => setTimeout(r, 1500));
 
-if (process.env.HARD) await page.evaluateOnNewDocument(() => { window.__HARD = 1; });
 if (process.env.HARD) await page.evaluate(() => { window.__HARD = 1; });
+if (process.env.TRACE) await page.evaluate((t) => { window.__TRACE = t; }, process.env.TRACE);
 const out = await page.evaluate(({ SETPOS, REF }) => {
     const { THREE, CS2, grenades, player, camera, applySetposString, mapLoader } = window.__debug;
     if (window.__HARD) mapLoader.isSoftGround = () => false;
@@ -33,6 +33,7 @@ const out = await page.evaluate(({ SETPOS, REF }) => {
     const fwdH = new THREE.Vector3(dir.x, 0, dir.z).normalize();
     const eye = player.getEyePosition(new THREE.Vector3());
     const want = new THREE.Vector3(REF[0], REF[1], REF[2]);
+    const f = (v) => `(${v.x.toFixed(0)}, ${v.y.toFixed(0)}, ${v.z.toFixed(0)})`;
 
     const sim = (strength, jump) => {
         const e = eye.clone();
@@ -52,8 +53,25 @@ const out = await page.evaluate(({ SETPOS, REF }) => {
         }
         return { rest: p.clone(), err: p.distanceTo(want), nb: bounces.length, lastB: bounces[bounces.length - 1] };
     };
+    // optional full-path trace of one type
+    if (window.__TRACE) {
+        const [strength, jump] = window.__TRACE === 'JT' ? [1, 1] : window.__TRACE === 'lob' ? [0, 0] : [1, 0];
+        const e = eye.clone(); let vel = new THREE.Vector3();
+        if (jump) { const rT = CS2.jumpthrowReleaseTime; e.y += CS2.jumpImpulse * rT - 0.5 * CS2.gravity * rT * rT; vel = new THREE.Vector3(0, CS2.jumpImpulse - CS2.gravity * rT, 0); }
+        const p = new THREE.Vector3(), v = new THREE.Vector3();
+        grenades.computeThrow(e, fwdH, pitch, strength, vel, p, v);
+        const nade = { position: p, velocity: v, rolling: false, age: 0 };
+        const path = []; let s = 0, prevVy = v.y, prevVx = v.x, prevVz = v.z;
+        while (grenades.stepProjectile(nade, CS2.TICK, false) && s < 64 * 14) {
+            const hb = (v.y > 0 && prevVy < 0);
+            const hx = Math.sign(v.x) !== Math.sign(prevVx) && Math.abs(prevVx) > 30;
+            const hz = Math.sign(v.z) !== Math.sign(prevVz) && Math.abs(prevVz) > 30;
+            if (hb || hx || hz) path.push(`  t${(s / 64).toFixed(2)} ${f(p)} v(${v.x.toFixed(0)},${v.y.toFixed(0)},${v.z.toFixed(0)}) ${hb ? 'FLOOR' : ''}${hx ? 'WALL-X' : ''}${hz ? 'WALL-Z' : ''}`);
+            prevVy = v.y; prevVx = v.x; prevVz = v.z; s++;
+        }
+        return { eye: f(eye), pitch: pitch.toFixed(1), fwd: f(fwdH), trace: path, rest: f(p) };
+    }
     const types = [['full', 1, 0], ['medium', 0.5, 0], ['lob', 0, 0], ['JT-full', 1, 1], ['JT-med', 0.5, 1], ['JT-lob', 0, 1]];
-    const f = (v) => `(${v.x.toFixed(0)}, ${v.y.toFixed(0)}, ${v.z.toFixed(0)})`;
     return {
         eye: f(eye), pitch: pitch.toFixed(1), fwd: f(fwdH),
         rows: types.map(([n, s, j]) => {
@@ -64,6 +82,11 @@ const out = await page.evaluate(({ SETPOS, REF }) => {
 }, { SETPOS, REF });
 await browser.close();
 console.log(`\nlineup: ${SETPOS}`);
-console.log(`eye ${out.eye}  pitch ${out.pitch}  fwdH ${out.fwd}   ref(box top) app ${REF.join(', ')}`);
-console.log('rest by throw type (app x,y,z):');
-out.rows.forEach((r) => console.log('  ' + r));
+console.log(`eye ${out.eye}  pitch ${out.pitch}  fwdH ${out.fwd}   ref app ${REF.join(', ')}`);
+if (out.trace) {
+    console.log(`TRACE ${process.env.TRACE} — bounces/wall-hits (rest ${out.rest}):`);
+    out.trace.forEach((l) => console.log(l));
+} else {
+    console.log('rest by throw type (app x,y,z):');
+    out.rows.forEach((r) => console.log('  ' + r));
+}

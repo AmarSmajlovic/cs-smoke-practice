@@ -163,6 +163,26 @@ for (const name of ['SVE', 'stoji', 'kretanje', 'skok']) {
     const m = metrics(list);
     console.log(`  ${name.padEnd(9)} n=${String(m.n).padStart(4)}  median ${m.med.toFixed(0).padStart(4)}u   <=50u ${m.in50.toFixed(0)}%`);
 }
+// Jumpthrow range bias vs distance: is our arc systematically short/long, and
+// does it worsen with throw distance? (throw app = (py,_,px); det app = (dy,_,dx))
+{
+    const sk = kept.filter((r) => r.vz > 100);
+    const rows = sk.map((r) => {
+        const realR = Math.hypot(r.dy - r.py, r.dx - r.px);
+        const ourR = Math.hypot(r.restGy - r.py, r.restGx - r.px);
+        return { realR, d: ourR - realR };
+    });
+    const bins = [[0, 800], [800, 1400], [1400, 2200], [2200, 9999]];
+    console.log(`\nskok range bias (our_range - real_range; negative = undershoot):`);
+    for (const [lo, hi] of bins) {
+        const b = rows.filter((x) => x.realR >= lo && x.realR < hi);
+        if (!b.length) continue;
+        const md = b.map((x) => x.d).sort((a, c) => a - c)[b.length >> 1];
+        const mean = b.reduce((a, x) => a + x.d, 0) / b.length;
+        console.log(`  range ${lo}-${hi}u  n=${String(b.length).padStart(3)}  median ${md.toFixed(0).padStart(5)}u  mean ${mean.toFixed(0).padStart(5)}u`);
+    }
+}
+
 console.log(`\nworst ${WORST} (game coords — throw -> our rest vs real det):`);
 for (const r of kept.sort((a, b) => b.err - a.err).slice(0, WORST)) {
     console.log(`  err ${r.err.toFixed(0).padStart(5)}u  ${cat(r).padEnd(8)} setpos ${r.px.toFixed(0)} ${r.py.toFixed(0)} ${r.pz?.toFixed?.(0) ?? '?'}  yaw ${r.yaw.toFixed(0)} pitch ${r.pitch.toFixed(0)}  ourRest(${r.restGx.toFixed(0)}, ${r.restGy.toFixed(0)}, ${r.restH.toFixed(0)})  realDet(${r.dx.toFixed(0)}, ${r.dy.toFixed(0)}, ${r.dz.toFixed(0)})`);
