@@ -34,11 +34,18 @@ scene.background = new THREE.Color(0x87ceeb);
 const camera = new THREE.PerspectiveCamera(73.74, window.innerWidth / window.innerHeight, 1, 30000);
 scene.add(camera);
 
-// Fullscreen viewport, CS2 behaviour: vertical FOV is fixed at 73.74 (the
-// game's 90° horizontal at 4:3) and the horizontal view grows with a wider
-// window (hor+), exactly like CS2 on wide monitors — no letterboxing. On a
-// portrait window the vertical FOV opens up instead so the horizontal view
-// never drops below the 4:3 game view.
+// Letterbox to 16:9 so the POV is ALWAYS identical to CS2 at 16:9 — the aspect
+// every lineup guide (csnades etc.) is filmed at. A Hor+ full-window view showed
+// more/less on the sides on any non-16:9 window, so a pasted lineup's world
+// framing (where the box/wall sits relative to the crosshair) didn't match the
+// reference. Now the game renders in a centred 16:9 rect (black bars fill the
+// rest); the crosshair is dead-centre of the window = centre of that rect, and
+// the vertical/horizontal FOV (73.74° / 106.26°) matches CS2 1:1.
+const VIEW_ASPECT = 16 / 9;
+// The centred 16:9 rect the game renders into, in WebGL viewport coords (CSS px,
+// y from the BOTTOM). The renderer buffer stays full-window so PiP/scissor math
+// that uses window coords keeps working; only the main view is boxed.
+let viewRect = { x: 0, y: 0, w: 0, h: 0 };
 function applyFov() {
     const W = window.innerWidth, H = window.innerHeight;
     renderer.setSize(W, H);
@@ -46,14 +53,27 @@ function applyFov() {
     el.style.position = 'absolute';
     el.style.left = '0px';
     el.style.top = '0px';
-    camera.aspect = W / H;
-    const MIN_H_FOV = THREE.MathUtils.degToRad(90); // CS2 horizontal at 4:3
-    const vFov = THREE.MathUtils.degToRad(73.74);
-    const hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect);
-    camera.fov = hFov >= MIN_H_FOV
-        ? 73.74
-        : THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(MIN_H_FOV / 2) / camera.aspect));
+    let rw, rh;
+    if (W / H > VIEW_ASPECT) { rh = H; rw = Math.round(H * VIEW_ASPECT); }
+    else { rw = W; rh = Math.round(W / VIEW_ASPECT); }
+    const oxLeft = Math.round((W - rw) / 2), oyTop = Math.round((H - rh) / 2);
+    viewRect = { x: oxLeft, y: H - oyTop - rh, w: rw, h: rh };
+    camera.aspect = VIEW_ASPECT;
+    camera.fov = 73.74; // CS2 vertical FOV at 16:9 (its 90° horizontal at 4:3)
     camera.updateProjectionMatrix();
+}
+// Clear the whole buffer black (the letterbox bars) then render `cam` into the
+// centred 16:9 rect, so the POV always matches CS2 at 16:9.
+function renderBoxed(cam) {
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
+    renderer.clear();
+    renderer.setScissorTest(true);
+    renderer.setViewport(viewRect.x, viewRect.y, viewRect.w, viewRect.h);
+    renderer.setScissor(viewRect.x, viewRect.y, viewRect.w, viewRect.h);
+    renderer.render(scene, cam);
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
 }
 
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
@@ -1571,14 +1591,14 @@ function animate() {
 
     tickSetposHold();
     if (followCam && pip.nade) {
-        // fullscreen smoke cam: the main view chases the nade
-        pipCam.aspect = window.innerWidth / window.innerHeight;
+        // fullscreen smoke cam: the main view chases the nade (same 16:9 box)
+        pipCam.aspect = VIEW_ASPECT;
         pipCam.updateProjectionMatrix();
         camera.visible = false; // keep the viewmodel arms out of the shot
-        renderer.render(scene, pipCam);
+        renderBoxed(pipCam);
         camera.visible = true;
     } else {
-        renderer.render(scene, camera);
+        renderBoxed(camera);
         renderPip();
     }
 }
@@ -1590,7 +1610,7 @@ if (import.meta.env.DEV) {
 }
 
 window.addEventListener('resize', () => {
-    applyFov(); // also sizes the canvas (fullscreen, hor+ FOV)
+    applyFov(); // re-centre the 16:9 letterbox rect for the new window size
     updateOrientationClass();
 });
 
