@@ -43,9 +43,9 @@ scene.add(camera);
 // the vertical/horizontal FOV (73.74° / 106.26°) matches CS2 1:1.
 const VIEW_ASPECT = 16 / 9;
 const BASE_VFOV = 73.74; // CS2 vertical FOV at 16:9 (its 90° horizontal at 4:3)
-// Corner scope: the PiP square magnifies down the crosshair 5× WHILE a throw is
+// Corner scope: the PiP square magnifies down the crosshair WHILE a throw is
 // charged (button held), then shows the smoke falling after release.
-const SCOPE_ZOOM = 5;
+const SCOPE_ZOOM = 7;
 // The centred 16:9 rect the game renders into, in WebGL viewport coords (CSS px,
 // y from the BOTTOM). The renderer buffer stays full-window so PiP/scissor math
 // that uses window coords keeps working; only the main view is boxed.
@@ -1520,6 +1520,7 @@ if (isMobile) gui.hide();
 // ---------------------------------------------------------------- Main loop
 const posDisplay = $('pos-display');
 const nadeXhair = $('nade-crosshair');
+const crosshairEl = $('crosshair');
 const clock = new THREE.Clock();
 let accumulator = 0;
 let frameCount = 0;
@@ -1595,9 +1596,11 @@ function animate() {
     updatePip(delta);
     smokeFog.style.opacity = (grenades.smokeFogDensity(camera.position) * 0.97).toFixed(3);
 
-    // full-screen lineup crosshair while a throw button is charged (CS2 style)
-    nadeXhair.classList.toggle('on',
-        playingNow() && hasSmoke && (leftHeld || rightHeld || touchHeldStrength !== null));
+    // full-screen lineup crosshair while a throw button is charged (CS2 style);
+    // hide the small dot crosshair then — the long one is the aim reference
+    const chargingXhair = playingNow() && hasSmoke && (leftHeld || rightHeld || touchHeldStrength !== null);
+    nadeXhair.classList.toggle('on', chargingXhair);
+    crosshairEl.classList.toggle('chg', chargingXhair);
 
     if (frameCount % 10 === 0 && posDisplay && map) {
         const hSpeed = Math.hypot(player.velocity.x, player.velocity.z);

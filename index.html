@@ -441,6 +441,7 @@
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             width: 24px; height: 24px; pointer-events: none; z-index: 10;
         }
+        #crosshair.chg { display: none; } /* hidden while the long charge crosshair shows */
         #crosshair i { position: absolute; background: #2bfc2b; box-shadow: 0 0 0 1px rgba(0,0,0,.55); }
         #crosshair i:nth-child(1) { width: 2px; height: 7px; left: 11px; top: 0; }
         #crosshair i:nth-child(2) { width: 2px; height: 7px; left: 11px; bottom: 0; }
@@ -462,12 +463,17 @@
             position: fixed; left: 10px; bottom: 8px; z-index: 10;
             font: 11px/1.4 monospace; color: rgba(255,255,255,.55); pointer-events: none;
         }
-        /* crosshair inside the corner scope (marks where you're aiming) */
-        .pip-cross { display: none; position: absolute; top: 50%; left: 50%; width: 16px; height: 16px; transform: translate(-50%, -50%); pointer-events: none; z-index: 2; }
+        /* crosshair inside the corner scope: the same CS2 dot crosshair PLUS
+           the long full-frame lines, so it reads exactly like the main aim */
+        .pip-cross { display: none; position: absolute; inset: 0; pointer-events: none; z-index: 2; }
         #pip-frame.scope .pip-cross { display: block; }
-        .pip-cross::before, .pip-cross::after { content: ''; position: absolute; background: #2bfc2b; box-shadow: 0 0 0 1px rgba(0,0,0,.55); }
-        .pip-cross::before { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); }
-        .pip-cross::after { top: 50%; left: 0; height: 2px; width: 100%; transform: translateY(-50%); }
+        .pip-cross .pc-v { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; transform: translateX(-50%); background: rgba(43,252,43,.6); box-shadow: 0 0 0 1px rgba(0,0,0,.3); }
+        .pip-cross .pc-h { position: absolute; top: 50%; left: 0; right: 0; height: 1px; transform: translateY(-50%); background: rgba(43,252,43,.6); box-shadow: 0 0 0 1px rgba(0,0,0,.3); }
+        .pip-cross i { position: absolute; background: #2bfc2b; box-shadow: 0 0 0 1px rgba(0,0,0,.55); }
+        .pip-cross i:nth-child(3) { width: 2px; height: 7px; left: calc(50% - 1px); top: calc(50% - 10px); } /* top */
+        .pip-cross i:nth-child(4) { width: 2px; height: 7px; left: calc(50% - 1px); top: calc(50% + 3px); }  /* bottom */
+        .pip-cross i:nth-child(5) { width: 7px; height: 2px; left: calc(50% - 10px); top: calc(50% - 1px); } /* left */
+        .pip-cross i:nth-child(6) { width: 7px; height: 2px; left: calc(50% + 3px); top: calc(50% - 1px); }  /* right */
         #hud-hint {
             position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 10;
             display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;
@@ -629,7 +635,9 @@
         <span class="kb"><kbd>ESC</kbd> menu</span>
     </div>
     <div id="nade-crosshair"><i class="v"></i><i class="h"></i></div>
-    <div id="pip-frame"><span class="tag">SMOKE CAM</span><i class="pip-cross"></i></div>
+    <div id="pip-frame"><span class="tag">SMOKE CAM</span>
+        <div class="pip-cross"><span class="pc-v"></span><span class="pc-h"></span><i></i><i></i><i></i><i></i></div>
+    </div>
     <div id="followcam-exit" class="hidden">✕ SMOKE CAM</div>
 
     <!-- CONTROLS / HELP -->
