@@ -1554,19 +1554,18 @@ function animate() {
 
     if (frameCount % 10 === 0 && posDisplay && map) {
         const hSpeed = Math.hypot(player.velocity.x, player.velocity.z);
-        // view angles: pitch + is down (CS2 setang convention), yaw in degrees
+        // Show CS2 console convention (exactly what P copies / you'd paste),
+        // NOT three.js internals — else the HUD numbers don't match the setpos
+        // string and it looks like the paste didn't take. pos = game x y z,
+        // ang = game pitch (+down) yaw. (see getposString for the mapping)
         _euler.setFromQuaternion(camera.quaternion);
         const pitch = -THREE.MathUtils.radToDeg(_euler.x);
-        const yaw = THREE.MathUtils.radToDeg(_euler.y);
-        // world point under the crosshair (for lineup screenshots/calibration)
-        camera.getWorldDirection(_fwdFull);
-        const aimHit = mapLoader.raycast(camera.position, _fwdFull, 20000);
-        const aim = aimHit
-            ? `aim ${aimHit.point.x.toFixed(0)} ${aimHit.point.y.toFixed(0)} ${aimHit.point.z.toFixed(0)}`
-            : 'aim sky';
+        const yaw = THREE.MathUtils.radToDeg(Math.atan2(-Math.sin(_euler.y), -Math.cos(_euler.y)));
+        const p = player.position;
+        const gx = p.z, gy = p.x, gz = p.y + CS2.eyeStand;
         posDisplay.textContent =
-            `pos ${player.position.x.toFixed(0)} ${player.position.y.toFixed(0)} ${player.position.z.toFixed(0)}  ` +
-            `ang ${pitch.toFixed(1)} ${yaw.toFixed(1)}  ${aim}  ` +
+            `pos ${gx.toFixed(0)} ${gy.toFixed(0)} ${gz.toFixed(0)}  ` +
+            `ang ${pitch.toFixed(1)} ${yaw.toFixed(1)}  ` +
             `vel ${hSpeed.toFixed(0)}${player.onLadder ? ' [ladder]' : ''}${player.noclip ? ' [noclip]' : ''}`;
     }
 
