@@ -42,6 +42,10 @@ scene.add(camera);
 // rest); the crosshair is dead-centre of the window = centre of that rect, and
 // the vertical/horizontal FOV (73.74° / 106.26°) matches CS2 1:1.
 const VIEW_ASPECT = 16 / 9;
+const BASE_VFOV = 73.74; // CS2 vertical FOV at 16:9 (its 90° horizontal at 4:3)
+// Optical zoom for precise lineup aiming (scroll wheel). 1 = normal; higher
+// narrows the FOV. Look sensitivity scales down with it so aim stays fine.
+let viewZoom = 1;
 // The centred 16:9 rect the game renders into, in WebGL viewport coords (CSS px,
 // y from the BOTTOM). The renderer buffer stays full-window so PiP/scissor math
 // that uses window coords keeps working; only the main view is boxed.
@@ -59,8 +63,18 @@ function applyFov() {
     const oxLeft = Math.round((W - rw) / 2), oyTop = Math.round((H - rh) / 2);
     viewRect = { x: oxLeft, y: H - oyTop - rh, w: rw, h: rh };
     camera.aspect = VIEW_ASPECT;
-    camera.fov = 73.74; // CS2 vertical FOV at 16:9 (its 90° horizontal at 4:3)
+    camera.fov = viewZoom <= 1 ? BASE_VFOV
+        : THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(BASE_VFOV) / 2) / viewZoom));
     camera.updateProjectionMatrix();
+}
+// Scroll-wheel zoom: hold the aim on a distant lineup reference precisely, then
+// throw (which snaps back to 1x so you see the smoke fly + the smoke cam).
+function setZoom(z) {
+    viewZoom = THREE.MathUtils.clamp(z, 1, 5);
+    applyFov();
+    applySens();  // sensitivity divides by zoom → fine aim while zoomed
+    const el = $('zoom-ind');
+    if (el) { el.textContent = viewZoom > 1.02 ? `${viewZoom.toFixed(1)}×` : ''; }
 }
 // Clear the whole buffer black (the letterbox bars) then render `cam` into the
 // centred 16:9 rect, so the POV always matches CS2 at 16:9.
@@ -126,7 +140,7 @@ const SENS_DEFAULT = 2.5; // CS2's own default
 let sens = parseFloat(localStorage.getItem('sp-sens')) || SENS_DEFAULT;
 function applySens() {
     sens = THREE.MathUtils.clamp(sens, 0.05, 20);
-    controls.pointerSpeed = sens * 0.192;
+    controls.pointerSpeed = sens * 0.192 / viewZoom; // zoomed in → finer aim
     localStorage.setItem('sp-sens', String(sens));
     $('sens-range').value = Math.min(sens, 8);
     $('sens-num').value = String(+sens.toFixed(2));
@@ -384,6 +398,7 @@ function pauseGame() {
     gameState = 'paused';
     // drop any half-finished throw gesture so resuming can't fire a smoke
     leftHeld = rightHeld = gestureL = gestureR = false;
+    if (viewZoom > 1) setZoom(1); // reset zoom so the menu view is normal
     updateThrowHelp();
     showResume('PAUSED');
 }
@@ -682,6 +697,13 @@ document.addEventListener('keyup', (e) => {
     if (e.code === 'Space') keys.space = false;
 });
 
+// Scroll wheel = zoom the view (fine lineup aiming). Up zooms in, down out.
+renderer.domElement.addEventListener('wheel', (e) => {
+    if (gameState !== 'playing') return;
+    e.preventDefault();
+    setZoom(viewZoom * (e.deltaY < 0 ? 1.2 : 1 / 1.2));
+}, { passive: false });
+
 // Throw: LMB = full, RMB = underhand (lob), LMB+RMB = medium.
 // A "gesture" collects every button pressed until ALL are released, then
 // throws once — state always resets so a failed throw can't corrupt the next.
@@ -841,6 +863,7 @@ function throwSmoke(strength, throwVel = player.velocity, eyeOverride = null) {
 
     const nade = grenades.throwGrenade(eyeOverride || player.getEyePosition(_eye), _fwdH, sourcePitchDeg, strength, throwVel);
     pipFollow(nade);
+    if (viewZoom > 1) setZoom(1); // snap back so you watch the smoke fly
 
     hasSmoke = false;
     // Underhand for the lob, overhand for everything else — the same split the
@@ -1608,7 +1631,7 @@ function animate() {
 animate();
 
 if (import.meta.env.DEV) {
-    window.__debug = { player, mapLoader, grenades, CS2, tuning, camera, THREE, startGame, solveAim, placeAimTarget, solveAimFromHere, lineupHelper, getposString, applySetposString };
+    window.__debug = { player, mapLoader, grenades, CS2, tuning, camera, THREE, startGame, solveAim, placeAimTarget, solveAimFromHere, lineupHelper, getposString, applySetposString, setZoom };
 }
 
 window.addEventListener('resize', () => {

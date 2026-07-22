@@ -462,6 +462,13 @@
             position: fixed; left: 10px; bottom: 8px; z-index: 10;
             font: 11px/1.4 monospace; color: rgba(255,255,255,.55); pointer-events: none;
         }
+        /* zoom level, shown just under the crosshair while scrolled in */
+        #zoom-ind {
+            position: fixed; top: calc(50% + 26px); left: 50%; transform: translateX(-50%);
+            z-index: 10; pointer-events: none;
+            font: 800 13px/1 'Segoe UI', sans-serif; letter-spacing: 1px;
+            color: rgba(43,252,43,.9); text-shadow: 0 1px 3px rgba(0,0,0,.8);
+        }
         #hud-hint {
             position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 10;
             display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;
@@ -605,6 +612,7 @@
 
     <!-- HUD -->
     <div id="crosshair" class="hidden"><i></i><i></i><i></i><i></i></div>
+    <div id="zoom-ind"></div>
     <div id="pos-display" class="hidden"></div>
     <div id="hud-hint" class="hidden">
         <span class="kb"><kbd>F</kbd> jumpthrow</span>
@@ -650,6 +658,7 @@
             <div class="ctl-row"><span class="k">L</span><span>save your last throw as a lineup (list in the pause menu)</span></div>
             <div class="ctl-row"><span class="k">C</span><span>clear all smokes and trails</span></div>
             <div class="ctl-row"><span class="k">P</span><span>copy your position as a CS2 setpos — works in the game console too</span></div>
+            <div class="ctl-row"><span class="k">SCROLL</span><span>zoom the view in/out for fine lineup aiming — snaps back to 1× when you throw</span></div>
             <div class="ctl-row"><span class="k">M</span><span>mark the spot you're aiming at as a target</span></div>
             <div class="ctl-row"><span class="k">N</span><span>auto-aim a throw at the target from where you stand (SHIFT = medium, ALT = lob)</span></div>
             <div class="ctl-row"><span class="k">SMOKE CAM</span><span>after every throw a cam follows the smoke — corner window or fullscreen chase (✕ to exit), pick in the pause menu</span></div>
